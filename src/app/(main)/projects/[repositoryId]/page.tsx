@@ -1,0 +1,113 @@
+import { notFound } from 'next/navigation'
+import { AppShell } from '@/components/app/app-shell'
+import { getProjectByRepositoryId } from '@/lib/projects-repository'
+import type { ProjectMaturity } from '@/types/insight-radar'
+
+interface ProjectDetailPageProps {
+  params: Promise<{ repositoryId: string }>
+}
+
+const maturityLabels: Record<ProjectMaturity, string> = {
+  early: '早期',
+  growth: '成长',
+  mature: '成熟',
+  stalled: '停滞',
+}
+
+export default async function ProjectDetailPage({ params }: ProjectDetailPageProps) {
+  const { repositoryId } = await params
+  const project = await getProjectByRepositoryId(decodeURIComponent(repositoryId))
+
+  if (!project) {
+    notFound()
+  }
+
+  return (
+    <AppShell currentPath="/projects">
+      <main className="space-y-6">
+        <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-6 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/40">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm text-emerald-700 dark:text-emerald-300">项目详情</p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{project.fullName}</h2>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700 dark:text-slate-200">{project.description}</p>
+            </div>
+            <a href={project.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex h-[42px] cursor-pointer items-center justify-center rounded-xl bg-brand-primary px-4 text-sm font-medium text-white transition hover:bg-brand-primary-hover dark:bg-emerald-700 dark:hover:bg-emerald-600">
+              打开 GitHub
+            </a>
+          </div>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-2">
+          <DetailCard title="基础信息">
+            <DetailRow label="项目名称" value={project.name} />
+            <DetailRow label="完整名称" value={project.fullName} />
+            <DetailRow label="语言" value={project.language} />
+            <DetailRow label="成熟度" value={maturityLabels[project.maturity]} />
+            <DetailRow label="关注账号" value={project.sourceGithubUsername} />
+            <DetailRow label="备注" value={project.notes || '暂无备注'} />
+          </DetailCard>
+
+          <DetailCard title="GitHub 指标">
+            <DetailRow label="Stars" value={project.stars.toLocaleString('zh-CN')} />
+            <DetailRow label="Forks" value={project.forks.toLocaleString('zh-CN')} />
+            <DetailRow label="Issues" value={project.issues.toLocaleString('zh-CN')} />
+            <DetailRow label="License" value={project.license || '暂无'} />
+            <DetailRow label="Fork 状态" value={project.isFork ? 'Fork 仓库' : '原始仓库'} />
+            <DetailRow label="原仓库" value={project.sourceRepositoryFullName || '无'} />
+          </DetailCard>
+
+          <DetailCard title="时间信息">
+            <DetailRow label="标星时间" value={formatDate(project.starAt)} />
+            <DetailRow label="最后活跃" value={formatDate(project.pushedAt ?? project.updatedAt)} />
+            <DetailRow label="GitHub 更新" value={formatDate(project.githubUpdatedAt ?? project.updatedAt)} />
+            <DetailRow label="数据创建" value={project.id ? '已入库' : '暂无'} />
+            <DetailRow label="软删除" value={project.deletedAt ? formatDate(project.deletedAt) : '未删除'} />
+          </DetailCard>
+
+          <DetailCard title="标签">
+            {project.topics.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {project.topics.map((topic) => (
+                  <span key={topic} className="rounded-full bg-emerald-50 px-3 py-1 text-sm text-emerald-800 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-800">
+                    {topic}
+                  </span>
+                ))}
+              </div>
+            ) : <p className="text-sm text-slate-500 dark:text-slate-400">暂无标签</p>}
+          </DetailCard>
+        </section>
+
+        <DetailCard title="README 摘要">
+          <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{project.readmeSummary || '暂无 AI 摘要。'}</p>
+        </DetailCard>
+
+        <DetailCard title="README 原文">
+          <pre className="max-h-[640px] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-950 p-5 text-sm leading-7 text-slate-100">{project.readmeContent || '暂无 README 原文。'}</pre>
+        </DetailCard>
+      </main>
+    </AppShell>
+  )
+}
+
+function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-50">{title}</h3>
+      <div className="mt-4 space-y-3">{children}</div>
+    </section>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid gap-1 text-sm sm:grid-cols-[96px_1fr]">
+      <dt className="text-slate-500 dark:text-slate-400">{label}：</dt>
+      <dd className="break-words text-slate-700 dark:text-slate-200">{value}</dd>
+    </div>
+  )
+}
+
+function formatDate(value: string) {
+  return value.slice(0, 10)
+}
