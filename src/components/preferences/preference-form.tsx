@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useBrowserStorageValue, writeBrowserStorage } from '@/lib/browser-storage'
-import type { ProjectMaturity, UserPreference } from '@/types/insight-radar'
+import { normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
+import { writeBrowserStorage } from '@/lib/browser-storage'
+import type { UserPreference } from '@/types/insight-radar'
 
 interface PreferenceFormProps {
   initialPreference: UserPreference
@@ -10,148 +11,90 @@ interface PreferenceFormProps {
 
 interface PreferenceFormState {
   preference: UserPreference
-  githubToken: string
   otherDomainEnabled: boolean
   otherDomain: string
-  otherLanguageEnabled: boolean
-  otherLanguage: string
 }
 
-const domains = ['智能体', '前端', '后端', '数据库', 'AI 工具', '开发工具', '基础设施']
-const languages = ['TypeScript', 'Python', 'Go', 'Rust', 'JavaScript']
-const maturities = ['unlimited', 'early', 'growth', 'mature', 'stalled'] as const
-const maturityLabels: Record<typeof maturities[number], string> = {
-  unlimited: '无限制',
-  early: '早期',
-  growth: '成长',
-  mature: '成熟',
-  stalled: '停滞',
-}
-const rankingModes: Array<UserPreference['rankingMode']> = ['new', 'mature', 'growth', 'multi_source', 'no_preference']
-const rankingModeLabels: Record<UserPreference['rankingMode'], string> = {
-  new: '优先新项目',
-  mature: '优先成熟项目',
-  growth: '优先成长项目',
-  multi_source: '优先多来源项目',
-  no_preference: '无偏好',
-}
-
-const githubTokenStorageKey = 'insight-radar-github-token'
-const preferenceStorageKey = 'insight-radar-user-preference'
+const unlimitedDomain = '不限领域'
+const domains = [unlimitedDomain, '智能体', '前端', '后端', '数据库', 'AI 工具', '开发工具', '基础设施']
 
 export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
   const [savedState, setSavedState] = useState<PreferenceFormState>(() => ({
-    preference: initialPreference,
-    githubToken: '',
+    preference: normalizePreference(initialPreference),
     otherDomainEnabled: false,
     otherDomain: '',
-    otherLanguageEnabled: false,
-    otherLanguage: '',
   }))
-  const savedGithubToken = useBrowserStorageValue(githubTokenStorageKey, '')
   const [saved, setSaved] = useState(false)
-
-  const { preference, githubToken, otherDomainEnabled, otherDomain, otherLanguageEnabled, otherLanguage } = savedState
-  const displayedGithubToken = githubToken.length > 0 ? githubToken : savedGithubToken
+  const { preference, otherDomainEnabled, otherDomain } = savedState
 
   function saveSettings() {
     const trimmedOtherDomain = otherDomain.trim()
-    const trimmedOtherLanguage = otherLanguage.trim()
-    const nextDomains = [
-      ...preference.domains.filter((domain) => domains.includes(domain)),
-      ...(otherDomainEnabled && trimmedOtherDomain ? [trimmedOtherDomain] : []),
-    ]
-    const nextLanguages = [
-      ...preference.languages.filter((language) => languages.includes(language)),
-      ...(otherLanguageEnabled && trimmedOtherLanguage ? [trimmedOtherLanguage] : []),
-    ]
-    const nextPreference = {
+    const nextDomains = preference.domains.includes(unlimitedDomain)
+      ? []
+      : [
+        ...preference.domains.filter((domain) => domains.includes(domain) && domain !== unlimitedDomain),
+        ...(otherDomainEnabled && trimmedOtherDomain ? [trimmedOtherDomain] : []),
+      ]
+    const nextPreference = normalizePreference({
       ...preference,
       domains: Array.from(new Set(nextDomains)),
-      languages: Array.from(new Set(nextLanguages)),
       updatedAt: new Date().toISOString(),
-    }
+    })
 
-    window.localStorage.setItem(githubTokenStorageKey, githubToken.trim())
     writeBrowserStorage(preferenceStorageKey, nextPreference)
     setSavedState({
       preference: nextPreference,
-      githubToken: githubToken.trim(),
       otherDomainEnabled,
       otherDomain: trimmedOtherDomain,
-      otherLanguageEnabled,
-      otherLanguage: trimmedOtherLanguage,
     })
     setSaved(true)
   }
 
-  function toggleListValue<T extends string>(key: 'domains' | 'languages' | 'maturity', value: T) {
+  function toggleDomain(value: string) {
     setSaved(false)
     setSavedState((currentState) => {
-      const current = currentState.preference
-      const list = current[key] as T[]
+      const baseDomains = currentState.preference.domains.filter((domain) => domains.includes(domain))
 
-      if (key === 'maturity') {
-        if (value === 'unlimited') {
-          return {
-            ...currentState,
-            preference: {
-              ...current,
-              maturity: [],
-            },
-          }
-        }
-
-        const nextList = list.includes(value) ? list.filter((item) => item !== value) : [...list, value]
+      if (value === unlimitedDomain) {
         return {
           ...currentState,
+          otherDomainEnabled: false,
+          otherDomain: '',
           preference: {
-            ...current,
-            maturity: nextList as ProjectMaturity[],
+            ...currentState.preference,
+            domains: baseDomains.includes(unlimitedDomain) ? [] : [unlimitedDomain],
           },
         }
       }
 
-      const baseList = key === 'domains'
-        ? current.domains.filter((item) => domains.includes(item)) as T[]
-        : key === 'languages'
-          ? current.languages.filter((item) => languages.includes(item)) as T[]
-          : list
-      const nextList = baseList.includes(value) ? baseList.filter((item) => item !== value) : [...baseList, value]
+      const activeDomains = baseDomains.filter((domain) => domain !== unlimitedDomain)
+      const nextDomains = activeDomains.includes(value) ? activeDomains.filter((domain) => domain !== value) : [...activeDomains, value]
 
       return {
         ...currentState,
         preference: {
-          ...current,
-          [key]: nextList,
+          ...currentState.preference,
+          domains: nextDomains,
         },
       }
     })
   }
 
+  function updatePreference(nextPreference: Partial<UserPreference>) {
+    setSaved(false)
+    setSavedState((currentState) => ({
+      ...currentState,
+      preference: normalizePreference({
+        ...currentState.preference,
+        ...nextPreference,
+      }),
+    }))
+  }
+
   return (
     <div className="space-y-6">
-      <PreferenceCard title="GitHub 设置">
-        <label htmlFor="github-token" className="block text-sm font-medium text-slate-700 dark:text-slate-200">GitHub Token</label>
-        <input
-          id="github-token"
-          type="password"
-          value={displayedGithubToken}
-          onChange={(event) => {
-            setSaved(false)
-            setSavedState((currentState) => ({
-              ...currentState,
-              githubToken: event.target.value,
-            }))
-          }}
-          className="mt-2 h-[46px] w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
-          placeholder="可选；用于提高 GitHub API 调用限额"
-        />
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Token 仅保存到当前浏览器本地，用于搜索来源账号 Star 的项目。</p>
-      </PreferenceCard>
-
       <PreferenceCard title="领域偏好">
-        <CheckboxGroup values={domains} selected={preference.domains} onToggle={(value) => toggleListValue('domains', value)} />
+        <CheckboxGroup values={domains} selected={preference.domains} onToggle={toggleDomain} />
         <OtherInput
           label="其他"
           checked={otherDomainEnabled}
@@ -161,6 +104,12 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
             setSavedState((currentState) => ({
               ...currentState,
               otherDomainEnabled: checked,
+              preference: checked
+                ? {
+                  ...currentState.preference,
+                  domains: currentState.preference.domains.filter((domain) => domain !== unlimitedDomain),
+                }
+                : currentState.preference,
             }))
           }}
           onValueChange={(value) => {
@@ -173,57 +122,38 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
         />
       </PreferenceCard>
 
-      <PreferenceCard title="语言偏好">
-        <CheckboxGroup values={languages} selected={preference.languages} onToggle={(value) => toggleListValue('languages', value)} />
-        <OtherInput
-          label="其他"
-          checked={otherLanguageEnabled}
-          value={otherLanguage}
-          onCheckedChange={(checked) => {
-            setSaved(false)
-            setSavedState((currentState) => ({
-              ...currentState,
-              otherLanguageEnabled: checked,
-            }))
-          }}
-          onValueChange={(value) => {
-            setSaved(false)
-            setSavedState((currentState) => ({
-              ...currentState,
-              otherLanguage: value,
-            }))
-          }}
+      <PreferenceCard title="推荐智能体提示词">
+        <textarea
+          value={preference.recommendationAgentPrompt}
+          onChange={(event) => updatePreference({ recommendationAgentPrompt: event.target.value })}
+          className="min-h-36 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
+          placeholder="请输入推荐智能体提示词"
         />
+        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{domainPreferences}'}（领域偏好）、{'{projectRequirement}'}（项目需求）、{'{finalRecommendationCount}'}（最终推荐数量）、{'{candidateProjectCount}'}（候选项目数量）、{'{candidateProjects}'}（候选项目）。</p>
       </PreferenceCard>
 
-      <PreferenceCard title="成熟度偏好">
-        <CheckboxGroup values={maturities} labels={maturityLabels} selected={preference.maturity.length === 0 ? ['unlimited'] : preference.maturity} onToggle={(value) => toggleListValue('maturity', value)} />
+      <PreferenceCard title="项目简介生成提示词">
+        <textarea
+          value={preference.projectProfileAgentPrompt}
+          onChange={(event) => updatePreference({ projectProfileAgentPrompt: event.target.value })}
+          className="min-h-36 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
+          placeholder="请输入项目简介生成提示词"
+        />
+        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{projectName}'}（项目名称）、{'{repositoryFullName}'}（仓库全名）、{'{projectDescription}'}（项目描述）、{'{primaryLanguage}'}（主要语言）、{'{readme}'}（README 内容）。</p>
       </PreferenceCard>
 
-      <PreferenceCard title="排序偏好">
-        <div className="flex flex-wrap gap-2">
-          {rankingModes.map((mode) => (
-            <label key={mode} className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${preference.rankingMode === mode ? 'border-emerald-700 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-slate-200 dark:border-slate-700'}`}>
-              <input
-                type="radio"
-                name="rankingMode"
-                checked={preference.rankingMode === mode}
-                onChange={() => {
-                  setSaved(false)
-                  setSavedState((currentState) => ({
-                    ...currentState,
-                    preference: {
-                      ...currentState.preference,
-                      rankingMode: mode,
-                    },
-                  }))
-                }}
-                className="accent-emerald-700"
-              />
-              {rankingModeLabels[mode]}
-            </label>
-          ))}
-        </div>
+      <PreferenceCard title="候选项目数量">
+        <input
+          id="candidate-project-count"
+          type="number"
+          min={1}
+          max={50}
+          step={1}
+          value={preference.candidateProjectCount}
+          onChange={(event) => updatePreference({ candidateProjectCount: Number(event.target.value) || 1 })}
+          className="mt-2 h-[46px] w-full max-w-48 rounded-xl border border-slate-300 bg-white px-4 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
+        />
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">系统会先从项目库找出这些候选项目，再由推荐智能体筛选出最终推荐数量。</p>
       </PreferenceCard>
 
       <div className="min-h-20">
@@ -260,12 +190,11 @@ function PreferenceCard({ title, children }: PreferenceCardProps) {
 
 interface CheckboxGroupProps<T extends string> {
   values: readonly T[]
-  labels?: Record<T, string>
   selected: T[]
   onToggle: (value: T) => void
 }
 
-function CheckboxGroup<T extends string>({ values, labels, selected, onToggle }: CheckboxGroupProps<T>) {
+function CheckboxGroup<T extends string>({ values, selected, onToggle }: CheckboxGroupProps<T>) {
   return (
     <div className="flex flex-wrap gap-2">
       {values.map((value) => (
@@ -274,7 +203,7 @@ function CheckboxGroup<T extends string>({ values, labels, selected, onToggle }:
             {selected.includes(value) ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
           </span>
           <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} className="sr-only" />
-          {labels?.[value] ?? value}
+          {value}
         </label>
       ))}
     </div>

@@ -8,7 +8,7 @@ export default function SettingsPage() {
       <main className="space-y-6">
         <section className="space-y-2">
           <h1 className="text-2xl font-semibold">用户设置</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">管理 GitHub API Token、项目领域和推荐排序设置。</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">管理领域偏好、推荐智能体提示词和项目简介生成提示词。</p>
         </section>
         <PreferenceForm initialPreference={getDefaultPreference()} />
       </main>

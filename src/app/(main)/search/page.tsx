@@ -14,6 +14,7 @@ const searchStorageKey = 'insight-radar-search-page-state'
 const initialFilters: ProjectSearchFilters = {
   query: '',
   languages: [],
+  maturity: [],
   sourceGithubUsername: null,
   days: null,
 }
@@ -124,6 +125,7 @@ export default function SearchPage() {
     pageState.filters.query.trim()
     || pageState.filters.sourceGithubUsername
     || pageState.filters.languages.length > 0
+    || pageState.filters.maturity.length > 0
     || pageState.filters.days !== null,
   )
 

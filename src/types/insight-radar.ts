@@ -53,6 +53,7 @@ export interface GithubProject {
 export interface ProjectSearchFilters {
   query: string
   languages: string[]
+  maturity: ProjectMaturity[]
   sourceGithubUsername: string | null
   days: number | null
 }
@@ -73,10 +74,9 @@ export interface SearchProjectsResponse {
 export interface UserPreference {
   id: string
   domains: string[]
-  languages: string[]
-  maturity: ProjectMaturity[]
-  intent: RecommendationIntent
-  rankingMode: 'new' | 'mature' | 'growth' | 'multi_source' | 'no_preference'
+  recommendationAgentPrompt: string
+  projectProfileAgentPrompt: string
+  candidateProjectCount: number
   updatedAt: string
 }
 
@@ -94,8 +94,16 @@ export interface RecommendationExplanation {
 
 export interface RecommendationPageState {
   query: string
+  filters: ProjectSearchFilters
   recommendationLimit: number
   recommendations: RecommendationExplanation[]
+}
+
+export interface ProjectProfileProgress {
+  status: 'ready' | 'running' | 'failed'
+  completedCount: number
+  totalCount: number
+  message: string | null
 }
 
 export interface ProjectsPageSnapshot {

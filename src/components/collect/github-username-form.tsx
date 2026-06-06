@@ -82,6 +82,7 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
             filters: {
               query: '',
               languages: [],
+              maturity: [],
               sourceGithubUsername: username,
               days: days === 'all' ? null : Number(days),
             },

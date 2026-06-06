@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ALTER COLUMN "readme_summary" SET DATA TYPE varchar(300);

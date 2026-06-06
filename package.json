@@ -16,6 +16,7 @@
     "@ai-sdk/react": "^3.0.196",
     "@mastra/ai-sdk": "^1.4.3",
     "@mastra/core": "^1.37.1",
+    "@zilliz/milvus2-sdk-node": "^3.0.3",
     "ai": "^6.0.195",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.6",

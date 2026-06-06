@@ -78,8 +78,8 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           </DetailCard>
         </section>
 
-        <DetailCard title="README 摘要">
-          <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{project.readmeSummary || '暂无 AI 摘要。'}</p>
+        <DetailCard title="项目简介">
+          <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{project.readmeSummary || '暂无项目简介。'}</p>
         </DetailCard>
 
         <DetailCard title="README 原文">

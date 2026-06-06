@@ -74,6 +74,7 @@ export default function ProjectsPage() {
           filters: {
             query: '',
             languages: [],
+            maturity: [],
             sourceGithubUsername,
             days: projectDraft.days === 'all' ? null : Number(projectDraft.days),
           },

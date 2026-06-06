@@ -1,7 +1,7 @@
-import { and, asc, count, eq, ilike, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, gte, ilike, inArray, isNull, notInArray, or, sql } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { projects } from '@/lib/db/schema'
-import type { GithubProject } from '@/types/insight-radar'
+import type { GithubProject, ProjectMaturity } from '@/types/insight-radar'
 
 export interface HomeMetrics {
   projectCount: number
@@ -108,30 +108,9 @@ export async function getProjectMapByRepositoryIds(repositoryIds: string[]) {
   }))
 }
 
-export async function searchProjectsFromDatabase(filters: { query: string; languages: string[]; sourceGithubUsername: string | null; page: number; pageSize: number }) {
+export async function searchProjectsFromDatabase(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; page: number; pageSize: number }) {
   const db = getDb()
-  const query = filters.query.trim()
-  const conditions = [isNull(projects.deletedAt)]
-
-  if (query) {
-    const keyword = `%${escapeLikePattern(query)}%`
-    conditions.push(or(
-      ilike(projects.name, keyword),
-      ilike(projects.fullName, keyword),
-      ilike(projects.description, keyword),
-      ilike(projects.readmeSummary, keyword),
-      ilike(projects.readmeContent, keyword),
-    )!)
-  }
-
-  if (filters.languages.length > 0) {
-    conditions.push(or(...filters.languages.map((language) => eq(projects.language, language)))!)
-  }
-
-  if (filters.sourceGithubUsername) {
-    conditions.push(eq(projects.sourceGithubUsername, filters.sourceGithubUsername))
-  }
-
+  const conditions = buildProjectSearchConditions(filters)
   const page = Math.max(1, filters.page)
   const pageSize = Math.max(1, filters.pageSize)
   const offset = (page - 1) * pageSize
@@ -159,6 +138,89 @@ export async function getProjectByRepositoryId(repositoryId: string) {
   const [project] = await db.select().from(projects).where(and(eq(projects.repositoryId, repositoryId), isNull(projects.deletedAt))).limit(1)
 
   return project ? toGithubProject(project) : null
+}
+
+export async function countProjectsMissingProfiles(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null }) {
+  const db = getDb()
+  const where = and(...buildProjectSearchConditions(filters), sql`${projects.readmeSummary} is null or trim(${projects.readmeSummary}) = ''`)
+  const [row] = await db.select({ value: count() }).from(projects).where(where)
+
+  return row?.value ?? 0
+}
+
+export async function listProjectsMissingProfiles(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; limit: number }) {
+  const db = getDb()
+  const where = and(...buildProjectSearchConditions(filters), sql`${projects.readmeSummary} is null or trim(${projects.readmeSummary}) = ''`)
+  const rows = await db.select().from(projects).where(where).orderBy(sql`${projects.starAt} desc`).limit(Math.max(1, filters.limit))
+
+  return rows.map(toGithubProject)
+}
+
+export async function updateProjectProfile(repositoryId: string, profile: string) {
+  const db = getDb()
+  await db.update(projects).set({ readmeSummary: profile, updatedAt: new Date() }).where(eq(projects.repositoryId, repositoryId))
+}
+
+export async function listProjectsForRecommendation(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; limit: number }) {
+  const db = getDb()
+  const rows = await db.select().from(projects).where(and(...buildProjectSearchConditions(filters))).orderBy(sql`${projects.stars} desc`).limit(Math.max(1, filters.limit))
+
+  return rows.map(toGithubProject)
+}
+
+export async function countProjectsForFilters(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null }) {
+  const db = getDb()
+  const [row] = await db.select({ value: count() }).from(projects).where(and(...buildProjectSearchConditions(filters)))
+
+  return row?.value ?? 0
+}
+
+export async function listProjectsForProfileRegeneration(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; excludeRepositoryIds: string[]; limit: number }) {
+  const db = getDb()
+  const conditions = buildProjectSearchConditions(filters)
+
+  if (filters.excludeRepositoryIds.length > 0) {
+    conditions.push(notInArray(projects.repositoryId, filters.excludeRepositoryIds))
+  }
+
+  const rows = await db.select().from(projects).where(and(...conditions)).orderBy(sql`${projects.starAt} desc`).limit(Math.max(1, filters.limit))
+
+  return rows.map(toGithubProject)
+}
+
+function buildProjectSearchConditions(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null }) {
+  const query = filters.query.trim()
+  const conditions = [isNull(projects.deletedAt)]
+
+  if (query) {
+    const keyword = `%${escapeLikePattern(query)}%`
+    conditions.push(or(
+      ilike(projects.name, keyword),
+      ilike(projects.fullName, keyword),
+      ilike(projects.description, keyword),
+      ilike(projects.readmeSummary, keyword),
+      ilike(projects.readmeContent, keyword),
+    )!)
+  }
+
+  if (filters.languages.length > 0) {
+    conditions.push(inArray(projects.language, filters.languages))
+  }
+
+  if (filters.maturity.length > 0) {
+    conditions.push(inArray(projects.maturity, filters.maturity))
+  }
+
+  if (filters.sourceGithubUsername) {
+    conditions.push(eq(projects.sourceGithubUsername, filters.sourceGithubUsername))
+  }
+
+  if (filters.days !== null) {
+    const since = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000)
+    conditions.push(gte(projects.githubUpdatedAt, since))
+  }
+
+  return conditions
 }
 
 async function findProjectByRepositoryId(repositoryId: string) {

@@ -52,7 +52,9 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
     ? (await searchProjectsFromDatabase({
       query: filters.query,
       languages: filters.languages,
+      maturity: filters.maturity,
       sourceGithubUsername: filters.sourceGithubUsername,
+      days: filters.days,
       page: 1,
       pageSize: repositories.length || 1,
     })).projects

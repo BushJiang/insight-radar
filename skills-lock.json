@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "byted-milvus": {
+      "source": "skills.volces.com",
+      "sourceType": "well-known",
+      "computedHash": "8134d53885accb9afb59e083d9342c858a049509b971402148ff7c51351d6c6b"
+    },
     "mastra": {
       "source": "mastra-ai/skills",
       "sourceType": "github",

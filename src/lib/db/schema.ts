@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { index, boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core'
 import type { ProjectMaturity } from '@/types/insight-radar'
 
 export const projects = pgTable('projects', {
@@ -23,7 +23,7 @@ export const projects = pgTable('projects', {
   pushedAt: timestamp('pushed_at', { withTimezone: true }),
   githubUpdatedAt: timestamp('github_updated_at', { withTimezone: true }).notNull(),
   readmeContent: text('readme_content'),
-  readmeSummary: text('readme_summary'),
+  readmeSummary: varchar('readme_summary', { length: 300 }),
   matchReason: text('match_reason').notNull(),
   maturity: text('maturity').$type<ProjectMaturity>().notNull(),
   collectionJobId: text('collection_job_id').notNull(),

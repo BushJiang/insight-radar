@@ -8,7 +8,9 @@ export async function POST(req: Request) {
       searchProjectsFromDatabase({
         query: body.filters.query,
         languages: body.filters.languages,
+        maturity: body.filters.maturity,
         sourceGithubUsername: body.filters.sourceGithubUsername,
+        days: body.filters.days,
         page: body.page,
         pageSize: body.pageSize,
       }),

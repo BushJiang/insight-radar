@@ -1,4 +1,4 @@
-import type { RecommendationExplanation } from '@/types/insight-radar'
+import type { ProjectSearchFilters, RecommendationExplanation } from '@/types/insight-radar'
 
 export type TransientFormState = {
   projects: {
@@ -8,6 +8,7 @@ export type TransientFormState = {
   }
   recommendations: {
     query: string
+    filters: ProjectSearchFilters
     recommendationLimit: number
     recommendations: RecommendationExplanation[]
   }
@@ -21,6 +22,13 @@ const defaultTransientFormState: TransientFormState = {
   },
   recommendations: {
     query: '',
+    filters: {
+      query: '',
+      languages: [],
+      maturity: [],
+      sourceGithubUsername: null,
+      days: null,
+    },
     recommendationLimit: 4,
     recommendations: [],
   },
