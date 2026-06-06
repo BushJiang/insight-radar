@@ -84,6 +84,7 @@ export interface RecommendationExplanation {
   id: string
   projectIds: string[]
   query: string
+  reasons: Record<string, string>
   facts: string[]
   inferences: string[]
   suggestions: string[]

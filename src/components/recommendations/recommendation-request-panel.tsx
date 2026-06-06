@@ -15,6 +15,7 @@ interface RecommendationRequestPanelProps {
   filters: ProjectSearchFilters
   sources: string[]
   loading?: boolean
+  recommending?: boolean
   profileRunning?: boolean
   canGenerateProfiles: boolean
   recommendationLimit: number
@@ -27,7 +28,7 @@ interface RecommendationRequestPanelProps {
   onRegenerateProfiles: () => void
 }
 
-export function RecommendationRequestPanel({ query, filters, sources, loading = false, profileRunning = false, canGenerateProfiles, recommendationLimit, onQueryChange, onFiltersChange, onRecommendationLimitChange, onSourceInputFocus, onSubmit, onGenerateProfiles, onRegenerateProfiles }: RecommendationRequestPanelProps) {
+export function RecommendationRequestPanel({ query, filters, sources, loading = false, recommending = false, profileRunning = false, canGenerateProfiles, recommendationLimit, onQueryChange, onFiltersChange, onRecommendationLimitChange, onSourceInputFocus, onSubmit, onGenerateProfiles, onRegenerateProfiles }: RecommendationRequestPanelProps) {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     onSubmit()
@@ -43,7 +44,7 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         placeholder="描述你想找的项目"
-        className="mt-2 min-h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-950"
+        className="mt-2 min-h-10 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none dark:border-slate-700 dark:bg-slate-950"
       />
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -67,7 +68,7 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
 
       <div className="mt-4 flex flex-wrap gap-3">
         <button type="submit" disabled={loading || profileRunning} className="h-[46px] cursor-pointer rounded-xl bg-brand-primary px-5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400">
-          {profileRunning ? '正在生成项目简介' : loading ? '正在推荐' : '智能推荐'}
+          {recommending ? '正在推荐' : '智能推荐'}
         </button>
         <button type="button" disabled={loading || profileRunning || !canGenerateProfiles} onClick={onGenerateProfiles} className="h-[46px] cursor-pointer rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
           生成项目简介

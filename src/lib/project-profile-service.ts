@@ -1,15 +1,10 @@
 import { createHash } from 'crypto'
-import { z } from 'zod'
 import { mastra } from '@/mastra'
 import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, updateProjectProfile } from '@/lib/projects-repository'
 import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
 const projectProfileMaxLength = 280
 const maxGeneratedProfilesPerRequest = 10
-
-const projectProfileSchema = z.object({
-  profile: z.string(),
-})
 
 export async function ensureProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
   const totalMissingCount = await countProjectsMissingProfiles(filters)
@@ -132,54 +127,20 @@ export function buildProfileHash(project: GithubProject) {
 async function generateProjectProfile(project: GithubProject, prompt: string) {
   const agent = mastra.getAgent('projectProfileAgent')
   const result = await agent.generate(buildProjectProfilePrompt(project, prompt), {
-    structuredOutput: {
-      schema: projectProfileSchema,
-      jsonPromptInjection: true,
-    },
     modelSettings: {
       maxOutputTokens: 320,
       temperature: 0.2,
     },
   })
-  const profile = resolveProjectProfile(result.object?.profile, result.text, project)
+  const profile = resolveProjectProfile(result.text, project)
 
   return truncateProjectProfile(profile)
 }
 
-function resolveProjectProfile(profile: string | undefined, text: string | undefined, project: GithubProject) {
-  const structuredProfile = profile?.trim()
+function resolveProjectProfile(text: string | undefined, project: GithubProject) {
+  const profile = text?.trim()
 
-  if (structuredProfile) {
-    return structuredProfile
-  }
-
-  const textProfile = extractProfileFromText(text)
-
-  if (textProfile) {
-    return textProfile
-  }
-
-  return buildFallbackProjectProfile(project)
-}
-
-function extractProfileFromText(text: string | undefined) {
-  if (!text) {
-    return null
-  }
-
-  const trimmedText = text.trim()
-
-  try {
-    const parsed = JSON.parse(trimmedText) as { profile?: unknown }
-
-    if (typeof parsed.profile === 'string' && parsed.profile.trim()) {
-      return parsed.profile.trim()
-    }
-  } catch {
-    return trimmedText
-  }
-
-  return trimmedText || null
+  return profile || buildFallbackProjectProfile(project)
 }
 
 function buildFallbackProjectProfile(project: GithubProject) {
@@ -204,5 +165,5 @@ function buildProjectProfilePrompt(project: GithubProject, prompt: string) {
 - 主要语言：${project.language}
 - README：${readme}
 
-请返回 JSON，字段为 profile。profile 必须是不超过 200 个中文字符的完整字符串。`
+请只输出项目简介正文，不要返回 JSON，不要添加标题或解释。项目简介必须是不超过 200 个中文字符的完整字符串。`
 }

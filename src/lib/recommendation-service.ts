@@ -1,9 +1,10 @@
-import { z } from 'zod'
 import { mastra } from '@/mastra'
 import { getProjectMapByRepositoryIds, listProjectsForRecommendation } from '@/lib/projects-repository'
 import { buildProfileHash, getProjectProfileStatus } from '@/lib/project-profile-service'
 import { searchProjectProfileVectors, upsertProjectProfileVectors } from '@/lib/project-vector-store'
 import type { GithubProject, ProjectSearchFilters, RecommendationExplanation, UserPreference } from '@/types/insight-radar'
+
+const recommendationReasonMaxLength = 280
 
 interface GenerateRecommendationsOptions {
   query: string
@@ -11,17 +12,6 @@ interface GenerateRecommendationsOptions {
   recommendationLimit: number
   preference: UserPreference
 }
-
-const recommendationSchema = z.object({
-  recommendations: z.array(z.object({
-    repositoryId: z.string(),
-    reason: z.string(),
-  })),
-  facts: z.array(z.string()),
-  inferences: z.array(z.string()),
-  suggestions: z.array(z.string()),
-  confidence: z.enum(['high', 'medium', 'low']),
-})
 
 export async function generateProjectRecommendations({ query, filters, recommendationLimit, preference }: GenerateRecommendationsOptions) {
   const progress = await getProjectProfileStatus(filters)
@@ -36,32 +26,19 @@ export async function generateProjectRecommendations({ query, filters, recommend
 
   const candidateProjectCount = Math.max(recommendationLimit, preference.candidateProjectCount)
   const candidateProjects = await getCandidateProjects(query, filters, candidateProjectCount)
-  const agent = mastra.getAgent('projectRecommendationAgent')
-  const result = await agent.generate(buildRecommendationPrompt({ query, preference, recommendationLimit, candidateProjects }), {
-    structuredOutput: {
-      schema: recommendationSchema,
-      jsonPromptInjection: true,
-    },
-    modelSettings: {
-      maxOutputTokens: 1600,
-      temperature: 0.2,
-    },
-  })
-  const selectedIds = result.object.recommendations
-    .map((recommendation) => recommendation.repositoryId)
-    .filter((repositoryId) => candidateProjects.some((project) => project.repositoryId === repositoryId))
-    .slice(0, recommendationLimit)
-  const fallbackIds = candidateProjects.map((project) => project.repositoryId).filter((repositoryId) => !selectedIds.includes(repositoryId))
-  const projectIds = [...selectedIds, ...fallbackIds].slice(0, recommendationLimit)
+  const selectedProjects = candidateProjects.slice(0, recommendationLimit)
+  const projectIds = selectedProjects.map((project) => project.repositoryId)
+  const reasons = await generateRecommendationReasons({ query, preference, recommendationLimit, candidateProjects: selectedProjects })
   const recommendation: RecommendationExplanation = {
     id: `rec-${Date.now()}`,
     projectIds,
     query,
-    facts: result.object.facts,
-    inferences: result.object.inferences,
-    suggestions: result.object.suggestions,
-    sources: candidateProjects.filter((project) => projectIds.includes(project.repositoryId)).map((project) => project.sourceUrl),
-    confidence: result.object.confidence,
+    reasons,
+    facts: buildRecommendationFacts(selectedProjects),
+    inferences: buildRecommendationInferences(query, selectedProjects),
+    suggestions: buildRecommendationSuggestions(selectedProjects),
+    sources: selectedProjects.map((project) => project.sourceUrl),
+    confidence: selectedProjects.length >= recommendationLimit ? 'medium' : 'low',
     createdAt: new Date().toISOString(),
   }
 
@@ -90,20 +67,56 @@ async function getCandidateProjects(query: string, filters: ProjectSearchFilters
   return projects.length > 0 ? projects : fallbackProjects
 }
 
-function buildRecommendationPrompt({ query, preference, recommendationLimit, candidateProjects }: { query: string; preference: UserPreference; recommendationLimit: number; candidateProjects: GithubProject[] }) {
+async function generateRecommendationReasons({ query, preference, recommendationLimit, candidateProjects }: { query: string; preference: UserPreference; recommendationLimit: number; candidateProjects: GithubProject[] }) {
+  if (candidateProjects.length === 0) {
+    return {}
+  }
+
+  try {
+    const agent = mastra.getAgent('projectRecommendationAgent')
+    const reasonEntries = await Promise.all(candidateProjects.map(async (project) => {
+      const result = await agent.generate(buildRecommendationReasonPrompt({ query, preference, recommendationLimit, project }), {
+        modelSettings: {
+          maxOutputTokens: 320,
+          temperature: 0.2,
+        },
+      })
+      const reason = normalizeRecommendationReason(result.text, project, query)
+
+      return [project.repositoryId, reason] as const
+    }))
+
+    return Object.fromEntries(reasonEntries)
+  } catch {
+    return Object.fromEntries(candidateProjects.map((project) => [project.repositoryId, buildFallbackRecommendationReason(project, query)]))
+  }
+}
+
+function normalizeRecommendationReason(text: string | undefined, project: GithubProject, query: string) {
+  const reason = text?.trim()
+
+  return reason ? sanitizeRecommendationReason(reason) : buildFallbackRecommendationReason(project, query)
+}
+
+function buildFallbackRecommendationReason(project: GithubProject, query: string) {
+  const demandText = query || '当前项目需求'
+  const profile = project.readmeSummary ?? project.description
+
+  return sanitizeRecommendationReason(`${project.fullName} 适合“${demandText}”。${profile}`)
+}
+
+function sanitizeRecommendationReason(reason: string) {
+  return reason
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/\*\*/g, '')
+    .replace(/```/g, '')
+    .replace(/^[-*]\s+/gm, '')
+    .trim()
+    .slice(0, recommendationReasonMaxLength)
+}
+
+function buildRecommendationReasonPrompt({ query, preference, recommendationLimit, project }: { query: string; preference: UserPreference; recommendationLimit: number; project: GithubProject }) {
   const domainsText = preference.domains.length > 0 ? preference.domains.join('、') : '无固定领域偏好'
-  const candidatesText = candidateProjects.map((project, index) => [
-    `候选项目 ${index + 1}`,
-    `repositoryId：${project.repositoryId}`,
-    `仓库：${project.fullName}`,
-    `描述：${project.description}`,
-    `项目简介：${project.readmeSummary ?? '暂无项目简介'}`,
-    `语言：${project.language}`,
-    `成熟度：${project.maturity}`,
-    `Stars：${project.stars}`,
-    `来源账号：${project.sourceGithubUsername}`,
-    `链接：${project.sourceUrl}`,
-  ].join('\n')).join('\n\n')
 
   return `${preference.recommendationAgentPrompt}
 
@@ -111,10 +124,43 @@ function buildRecommendationPrompt({ query, preference, recommendationLimit, can
 - 领域偏好：${domainsText}
 - 项目需求：${query || '用户未填写具体需求，请基于领域偏好推荐。'}
 - 最终推荐数量：${recommendationLimit}
-- 候选项目数量：${candidateProjects.length}
+- 候选项目数量：1
 
-候选项目：
-${candidatesText}
+项目：
+repositoryId：${project.repositoryId}
+仓库：${project.fullName}
+描述：${project.description}
+项目简介：${project.readmeSummary ?? '暂无项目简介'}
+语言：${project.language}
+成熟度：${project.maturity}
+Stars：${project.stars}
+来源账号：${project.sourceGithubUsername}
+链接：${project.sourceUrl}
 
-请只从候选项目中选择最终推荐项目，返回 JSON。`
+请只输出这个项目的推荐理由，不要返回 JSON，不要使用 Markdown，不要输出 ##、**、列表符号或代码块。输出内容不超过 200 字，格式如下所示：
+推荐理由：
+适用场景：
+上手建议：
+风险提醒：`
 }
+
+function buildRecommendationFacts(projects: GithubProject[]) {
+  return projects.map((project) => `${project.fullName}：${project.language}，${project.stars} Stars，来源账号 ${project.sourceGithubUsername}。`)
+}
+
+function buildRecommendationInferences(query: string, projects: GithubProject[]) {
+  if (projects.length === 0) {
+    return ['当前筛选条件下没有候选项目。']
+  }
+
+  return projects.map((project) => `${project.fullName} 与“${query || '当前需求'}”的匹配主要来自项目简介、语言和项目活跃度。`)
+}
+
+function buildRecommendationSuggestions(projects: GithubProject[]) {
+  if (projects.length === 0) {
+    return ['放宽来源账号、语言、成熟度或时间范围筛选后重新推荐。']
+  }
+
+  return projects.map((project) => `先阅读 ${project.fullName} 的 README、许可证和最近提交，再决定是否深入使用。`)
+}
+

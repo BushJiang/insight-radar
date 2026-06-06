@@ -220,11 +220,11 @@ export default function ProjectsPage() {
               输入 GitHub 账号并点击开始采集后，这里会显示本次采集到的 Star 项目。
             </div>
           )}
+          <CollectionProgressCard progress={pageState.progress} />
           {projects.length > projectPageSize ? (
             <ProjectPagination currentPage={pageState.currentPage} totalPages={totalPages} totalItems={projects.length} onPageChange={(currentPage) => updatePageState({ currentPage })} />
           ) : null}
         </section>
-        <CollectionProgressCard progress={pageState.progress} />
       </main>
     </AppShell>
   )

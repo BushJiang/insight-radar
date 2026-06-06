@@ -51,6 +51,7 @@ export function ProjectCard({ project, recommendationReason }: ProjectCardProps)
         </InfoRow>
         <InfoRow label="语言">{project.language}</InfoRow>
         <InfoRow label="关注账号">{watchedAccounts}</InfoRow>
+        {project.readmeSummary ? <InfoRow label="项目简介">{project.readmeSummary}</InfoRow> : null}
         {recommendationReason ? <InfoRow label="推荐理由">{recommendationReason}</InfoRow> : null}
       </dl>
     </article>

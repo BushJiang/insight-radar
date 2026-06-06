@@ -122,22 +122,22 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
         />
       </PreferenceCard>
 
-      <PreferenceCard title="推荐智能体提示词">
+      <PreferenceCard title="项目推荐提示词">
         <textarea
           value={preference.recommendationAgentPrompt}
           onChange={(event) => updatePreference({ recommendationAgentPrompt: event.target.value })}
           className="min-h-36 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
-          placeholder="请输入推荐智能体提示词"
+          placeholder="请输入项目推荐提示词"
         />
         <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{domainPreferences}'}（领域偏好）、{'{projectRequirement}'}（项目需求）、{'{finalRecommendationCount}'}（最终推荐数量）、{'{candidateProjectCount}'}（候选项目数量）、{'{candidateProjects}'}（候选项目）。</p>
       </PreferenceCard>
 
-      <PreferenceCard title="项目简介生成提示词">
+      <PreferenceCard title="项目简介提示词">
         <textarea
           value={preference.projectProfileAgentPrompt}
           onChange={(event) => updatePreference({ projectProfileAgentPrompt: event.target.value })}
           className="min-h-36 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
-          placeholder="请输入项目简介生成提示词"
+          placeholder="请输入项目简介提示词"
         />
         <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{projectName}'}（项目名称）、{'{repositoryFullName}'}（仓库全名）、{'{projectDescription}'}（项目描述）、{'{primaryLanguage}'}（主要语言）、{'{readme}'}（README 内容）。</p>
       </PreferenceCard>

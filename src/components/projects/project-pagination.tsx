@@ -13,10 +13,9 @@ export function ProjectPagination({ currentPage, totalPages, totalItems, onPageC
   const items = buildPaginationItems(currentPage, totalPages)
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white/95 px-4 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/95">
-      <div className="flex flex-col items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-        <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-2 dark:border-slate-800 dark:bg-slate-950/40">
-          <button
+    <div className="flex flex-col items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+      <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-slate-100 bg-slate-50/80 p-2 dark:border-slate-800 dark:bg-slate-950/40">
+        <button
             type="button"
             disabled={currentPage === 1}
             onClick={() => onPageChange(Math.max(1, currentPage - 1))}
@@ -47,9 +46,8 @@ export function ProjectPagination({ currentPage, totalPages, totalItems, onPageC
           >
             下一页
           </button>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">第{currentPage}/{totalPages}页，共{totalItems}个项目</p>
       </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">第{currentPage}/{totalPages}页，共{totalItems}个项目</p>
     </div>
   )
 }

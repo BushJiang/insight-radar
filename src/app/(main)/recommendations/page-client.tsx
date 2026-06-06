@@ -26,11 +26,12 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   const [filters, setFilters] = useState(recommendationDraft.filters)
   const [query, setQuery] = useState(recommendationDraft.query)
   const [recommendations, setRecommendations] = useState<RecommendationExplanation[]>(recommendationDraft.recommendations)
-  const [projects, setProjects] = useState(initialProjects)
+  const [projects, setProjects] = useState(recommendationDraft.projects.length > 0 ? recommendationDraft.projects : initialProjects)
   const [sources, setSources] = useState<string[]>([])
   const [sourcesLoaded, setSourcesLoaded] = useState(false)
   const [progress, setProgress] = useState<ProjectProfileProgress>(initialProgress)
   const [loading, setLoading] = useState(false)
+  const [recommending, setRecommending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const canGenerateProfiles = progress.totalCount > progress.completedCount
 
@@ -90,6 +91,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
 
   const handleRecommend = useCallback(async () => {
     setLoading(true)
+    setRecommending(true)
     setError(null)
 
     try {
@@ -118,15 +120,17 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
 
       if (result.projects.length > 0) {
         setProjects(result.projects)
+        writeTransientRecommendationFormState({ projects: result.projects })
       }
 
       if (result.recommendation) {
         setRecommendations([result.recommendation])
-        writeTransientRecommendationFormState({ recommendations: [result.recommendation] })
+        writeTransientRecommendationFormState({ recommendations: [result.recommendation], projects: result.projects })
       }
     } catch {
       setError('智能推荐失败，请稍后重试。')
     } finally {
+      setRecommending(false)
       setLoading(false)
     }
   }, [filters, query, recommendationLimit])
@@ -201,6 +205,8 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
             filters={filters}
             sources={sources}
             loading={loading}
+            recommending={recommending}
+            profileRunning={loading && !recommending}
             canGenerateProfiles={canGenerateProfiles}
             recommendationLimit={recommendationLimit}
             onQueryChange={(nextQuery) => {

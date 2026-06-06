@@ -15,14 +15,8 @@ export function RecommendationExplanationCard({ recommendation, projects }: Reco
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       {selectedProjects.map((project) => (
-        <ProjectCard key={project.repositoryId} project={project} recommendationReason={buildRecommendationReason(project, recommendation.query)} />
+        <ProjectCard key={project.repositoryId} project={project} recommendationReason={recommendation.reasons[project.repositoryId]} />
       ))}
     </div>
   )
-}
-
-function buildRecommendationReason(project: GithubProject, query: string) {
-  const demandText = query || '当前项目需求'
-
-  return `${project.fullName} 适合“${demandText}”。${project.readmeSummary ?? project.description} 来源账号：${project.sourceGithubUsername}。`
 }
