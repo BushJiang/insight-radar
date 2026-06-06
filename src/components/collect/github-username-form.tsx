@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { validateGithubUsername } from '@/lib/mock-actions'
+import { validateGithubUsername } from '@/lib/github-validation'
 import type { CollectionProgress, GithubProject, GithubStarredSearchResponse } from '@/types/insight-radar'
 
 interface GithubUsernameFormProps {
@@ -48,22 +48,32 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
     let updatedDuplicateCount = 0
     let unchangedDuplicateCount = 0
     let estimatedTotalCount: number | null = null
+    let lastReportedFetchedCount = 0
     const collectedProjects: GithubProject[] = []
+
+    function reportRunningProgress(currentUsername: string, force = false) {
+      if (!force && fetchedCount < lastReportedFetchedCount + 10) {
+        return
+      }
+
+      lastReportedFetchedCount = fetchedCount
+      onProgressChange?.({
+        status: 'running',
+        currentUsername,
+        fetchedCount,
+        duplicateCount,
+        updatedDuplicateCount,
+        unchangedDuplicateCount,
+        estimatedTotalCount,
+        startedAt,
+        finishedAt: null,
+        errorMessage: null,
+      })
+    }
 
     try {
       for (const username of values) {
-        onProgressChange?.({
-          status: 'running',
-          currentUsername: username,
-          fetchedCount,
-          duplicateCount,
-          updatedDuplicateCount,
-          unchangedDuplicateCount,
-          estimatedTotalCount,
-          startedAt,
-          finishedAt: null,
-          errorMessage: null,
-        })
+        reportRunningProgress(username, true)
 
         const response = await fetch('/api/github/starred-search', {
           method: 'POST',
@@ -79,10 +89,11 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
             maxProjects: maxProjectsValue,
           }),
         })
-        const result = await response.json() as GithubStarredSearchResponse
+        const rawResult = await response.text()
+        const result = rawResult ? JSON.parse(rawResult) as GithubStarredSearchResponse : null
 
-        if (!response.ok || result.error) {
-          const message = result.error || '采集失败，请稍后重试。'
+        if (!response.ok || result?.error || !result) {
+          const message = result?.error || `采集请求失败，服务端返回 ${response.status}。`
           setError(message)
           onProgressChange?.({
             status: 'failed',
@@ -109,18 +120,7 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
         collectedProjects.push(...result.projects)
         onProjectsCollected?.([...collectedProjects])
         onCreated?.({ username, days: days === 'all' ? null : Number(days), maxProjects: maxProjectsValue, projects: [...collectedProjects] })
-        onProgressChange?.({
-          status: 'running',
-          currentUsername: username,
-          fetchedCount,
-          duplicateCount,
-          updatedDuplicateCount,
-          unchangedDuplicateCount,
-          estimatedTotalCount,
-          startedAt,
-          finishedAt: null,
-          errorMessage: null,
-        })
+        reportRunningProgress(username)
       }
 
       onProgressChange?.({
@@ -135,8 +135,8 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
         finishedAt: new Date().toISOString(),
         errorMessage: null,
       })
-    } catch {
-      const message = '采集失败，请检查网络后重试。'
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '采集请求失败，请稍后重试。'
       setError(message)
       onProgressChange?.({
         status: 'failed',

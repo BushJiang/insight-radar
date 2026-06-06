@@ -1,7 +1,6 @@
 'use client'
 
-import { mockPreference } from '@/data/mock-insight-radar'
-import { generateMockRecommendation } from '@/lib/mock-actions'
+import { getDefaultPreference } from '@/lib/default-preference'
 import type { GithubProject, RecommendationExplanation } from '@/types/insight-radar'
 
 interface RecommendationRequestPanelProps {
@@ -14,10 +13,27 @@ interface RecommendationRequestPanelProps {
 }
 
 export function RecommendationRequestPanel({ projects, query, onQueryChange, recommendationLimit, onRecommendationLimitChange, onGenerated }: RecommendationRequestPanelProps) {
-
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    onGenerated(generateMockRecommendation(projects.slice(0, recommendationLimit), mockPreference, query))
+
+    const selectedProjects = projects.slice(0, recommendationLimit)
+    const preference = getDefaultPreference()
+    const demandText = query || `基于 ${selectedProjects.length.toLocaleString('zh-CN')} 个候选项目生成推荐`
+
+    onGenerated({
+      id: `rec-${Date.now()}`,
+      projectIds: selectedProjects.map((project) => project.repositoryId),
+      query: demandText,
+      facts: selectedProjects.map((project) => `${project.fullName} 的主要语言是 ${project.language}，来源账号是 ${project.sourceGithubUsername}。`),
+      inferences: selectedProjects.map((project) => `${project.fullName} 的匹配理由是：${project.matchReason}`),
+      suggestions: [
+        `当前推荐目的为“学习”，建议先查看 README、最近提交和 Issue 活跃度。`,
+        '如果用于生产引入，需要继续检查许可证、发布节奏和社区维护状态。',
+      ],
+      sources: selectedProjects.map((project) => project.sourceUrl),
+      confidence: selectedProjects.every((project) => project.sourceUrl) ? 'high' : 'low',
+      createdAt: preference.updatedAt,
+    })
   }
 
   return (

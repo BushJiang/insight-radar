@@ -53,11 +53,48 @@ export function useBrowserStorage<T>(key: string, fallback: T) {
   const getServerSnapshot = useCallback(() => fallback, [fallback])
   const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 
-  const setValue = useCallback((nextValue: T) => {
-    writeBrowserStorage(key, nextValue)
-  }, [key])
+  const setValue = useCallback((nextValue: T | ((currentValue: T) => T)) => {
+    const resolvedValue = typeof nextValue === 'function'
+      ? (nextValue as (currentValue: T) => T)(readBrowserStorageSnapshot(key, fallback))
+      : nextValue
+
+    writeBrowserStorage(key, resolvedValue)
+  }, [fallback, key])
 
   return [value, setValue] as const
+}
+
+export function useBrowserStorageValue<T>(key: string, fallback: T) {
+  const subscribe = useCallback((onStoreChange: () => void) => {
+    if (typeof window === 'undefined') {
+      return () => undefined
+    }
+
+    function handleStorage(event: Event) {
+      if (event instanceof StorageEvent && event.key !== key) {
+        return
+      }
+
+      if (event instanceof CustomEvent && event.detail?.key !== key) {
+        return
+      }
+
+      onStoreChange()
+    }
+
+    window.addEventListener('storage', handleStorage)
+    window.addEventListener(browserStorageEventName, handleStorage)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener(browserStorageEventName, handleStorage)
+    }
+  }, [key])
+
+  const getSnapshot = useCallback(() => readBrowserStorageSnapshot(key, fallback), [key, fallback])
+  const getServerSnapshot = useCallback(() => fallback, [fallback])
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
 }
 
 function readBrowserStorageSnapshot<T>(key: string, fallback: T): T {

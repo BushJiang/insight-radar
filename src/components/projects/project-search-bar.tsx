@@ -8,9 +8,10 @@ interface ProjectSearchBarProps {
   loading?: boolean
   onSearch: () => void
   onChange: (filters: Partial<ProjectSearchFilters>) => void
+  onSourceInputFocus?: () => void
 }
 
-export function ProjectSearchBar({ filters, sources, loading = false, onSearch, onChange }: ProjectSearchBarProps) {
+export function ProjectSearchBar({ filters, sources, loading = false, onSearch, onChange, onSourceInputFocus }: ProjectSearchBarProps) {
   return (
     <div className="space-y-4">
       <div className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_120px]">
@@ -31,7 +32,7 @@ export function ProjectSearchBar({ filters, sources, loading = false, onSearch, 
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <SourceAccountInput value={filters.sourceGithubUsername ?? ''} options={sources} onChange={(value) => onChange({ sourceGithubUsername: value || null })} />
+        <SourceAccountInput value={filters.sourceGithubUsername ?? ''} options={sources} onChange={(value) => onChange({ sourceGithubUsername: value || null })} onFocus={onSourceInputFocus} />
         <SelectFilter label="语言" value={filters.languages[0] ?? ''} options={['TypeScript', 'Python', 'Go', 'Rust', '其他']} allLabel="全部" onChange={(value) => onChange({ languages: value ? [value] : [] })} />
         <SelectFilter label="时间范围" value={String(filters.days ?? '')} options={['7', '30', '90', '']} optionLabels={{ '7': '最近 7 天', '30': '最近 30 天', '90': '最近 90 天', '': '不限时间' }} onChange={(value) => onChange({ days: value ? Number(value) : null })} />
       </div>
@@ -48,7 +49,7 @@ interface SelectFilterProps {
   onChange: (value: string) => void
 }
 
-function SourceAccountInput({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
+function SourceAccountInput({ value, options, onChange, onFocus }: { value: string; options: string[]; onChange: (value: string) => void; onFocus?: () => void }) {
   return (
     <div>
       <label htmlFor="source-account" className="block text-sm font-medium text-black dark:text-black">来源账号</label>
@@ -57,6 +58,7 @@ function SourceAccountInput({ value, options, onChange }: { value: string; optio
         list="source-account-options"
         value={value}
         onChange={(event) => onChange(event.target.value.trim())}
+        onFocus={onFocus}
         className="mt-2 h-[46px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
         placeholder="输入 GitHub 用户名"
       />

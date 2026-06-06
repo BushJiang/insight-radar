@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { readBrowserStorage, writeBrowserStorage } from '@/lib/browser-storage'
+import { useBrowserStorageValue, writeBrowserStorage } from '@/lib/browser-storage'
 import type { ProjectMaturity, UserPreference } from '@/types/insight-radar'
 
 interface PreferenceFormProps {
@@ -39,22 +39,6 @@ const rankingModeLabels: Record<UserPreference['rankingMode'], string> = {
 const githubTokenStorageKey = 'insight-radar-github-token'
 const preferenceStorageKey = 'insight-radar-user-preference'
 
-function getSavedPreferenceState(initialPreference: UserPreference): PreferenceFormState {
-  const savedPreference = readBrowserStorage(preferenceStorageKey, initialPreference)
-  const savedGithubToken = readBrowserStorage(githubTokenStorageKey, '')
-  const savedOtherDomain = savedPreference.domains.find((domain) => !domains.includes(domain)) ?? ''
-  const savedOtherLanguage = savedPreference.languages.find((language) => !languages.includes(language)) ?? ''
-
-  return {
-    preference: savedPreference,
-    githubToken: savedGithubToken,
-    otherDomainEnabled: savedOtherDomain.length > 0,
-    otherDomain: savedOtherDomain,
-    otherLanguageEnabled: savedOtherLanguage.length > 0,
-    otherLanguage: savedOtherLanguage,
-  }
-}
-
 export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
   const [savedState, setSavedState] = useState<PreferenceFormState>(() => ({
     preference: initialPreference,
@@ -64,13 +48,11 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
     otherLanguageEnabled: false,
     otherLanguage: '',
   }))
+  const savedGithubToken = useBrowserStorageValue(githubTokenStorageKey, '')
   const [saved, setSaved] = useState(false)
 
   const { preference, githubToken, otherDomainEnabled, otherDomain, otherLanguageEnabled, otherLanguage } = savedState
-
-  function restoreSavedState() {
-    setSavedState(getSavedPreferenceState(initialPreference))
-  }
+  const displayedGithubToken = githubToken.length > 0 ? githubToken : savedGithubToken
 
   function saveSettings() {
     const trimmedOtherDomain = otherDomain.trim()
@@ -154,7 +136,7 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
         <input
           id="github-token"
           type="password"
-          value={githubToken}
+          value={displayedGithubToken}
           onChange={(event) => {
             setSaved(false)
             setSavedState((currentState) => ({
@@ -245,13 +227,6 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
       </PreferenceCard>
 
       <div className="min-h-20">
-        <button
-          type="button"
-          onClick={restoreSavedState}
-          className="h-[46px] cursor-pointer rounded-xl border border-emerald-200 bg-white px-5 text-sm font-medium text-emerald-700 shadow-sm transition hover:bg-emerald-50 active:scale-95 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
-        >
-          恢复已保存设置
-        </button>
         <button
           type="button"
           onClick={saveSettings}

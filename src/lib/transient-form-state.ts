@@ -1,3 +1,5 @@
+import type { RecommendationExplanation } from '@/types/insight-radar'
+
 export type TransientFormState = {
   projects: {
     githubUsername: string
@@ -7,6 +9,7 @@ export type TransientFormState = {
   recommendations: {
     query: string
     recommendationLimit: number
+    recommendations: RecommendationExplanation[]
   }
 }
 
@@ -19,6 +22,7 @@ const defaultTransientFormState: TransientFormState = {
   recommendations: {
     query: '',
     recommendationLimit: 4,
+    recommendations: [],
   },
 }
 

@@ -49,11 +49,13 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
   const collectedProjects = await Promise.all(repositories.map((repository) => mapRepositoryToProject(repository, username, githubToken?.trim())))
   const persistedResult = await persistCollectedProjects(collectedProjects)
   const projects = filters.query.trim()
-    ? await searchProjectsFromDatabase({
+    ? (await searchProjectsFromDatabase({
       query: filters.query,
       languages: filters.languages,
       sourceGithubUsername: filters.sourceGithubUsername,
-    })
+      page: 1,
+      pageSize: repositories.length || 1,
+    })).projects
     : collectedProjects
 
   return {

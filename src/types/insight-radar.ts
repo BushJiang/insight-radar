@@ -57,6 +57,19 @@ export interface ProjectSearchFilters {
   days: number | null
 }
 
+export interface SearchProjectsRequest {
+  filters: ProjectSearchFilters
+  page: number
+  pageSize: number
+}
+
+export interface SearchProjectsResponse {
+  projects: GithubProject[]
+  totalCount: number
+  sources: string[]
+  error: string | null
+}
+
 export interface UserPreference {
   id: string
   domains: string[]
@@ -77,6 +90,23 @@ export interface RecommendationExplanation {
   sources: string[]
   confidence: RecommendationConfidence
   createdAt: string
+}
+
+export interface RecommendationPageState {
+  query: string
+  recommendationLimit: number
+  recommendations: RecommendationExplanation[]
+}
+
+export interface ProjectsPageSnapshot {
+  items: GithubProject[]
+  sourceGithubUsername: string | null
+  updatedAt: string | null
+}
+
+export interface SearchPageSnapshot {
+  items: GithubProject[]
+  updatedAt: string | null
 }
 
 export interface GithubStarredSearchRequest {
@@ -113,4 +143,9 @@ export interface CollectionProgress {
 
 export interface UserSettings {
   githubToken: string
+}
+
+export interface HomeMetrics {
+  projectCount: number
+  sourceCount: number
 }

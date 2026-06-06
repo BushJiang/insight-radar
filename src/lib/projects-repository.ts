@@ -1,7 +1,12 @@
-import { and, eq, ilike, isNull, or } from 'drizzle-orm'
+import { and, asc, count, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { projects } from '@/lib/db/schema'
 import type { GithubProject } from '@/types/insight-radar'
+
+export interface HomeMetrics {
+  projectCount: number
+  sourceUsernames: string[]
+}
 
 export interface PersistProjectsResult {
   createdProjects: GithubProject[]
@@ -68,7 +73,42 @@ export async function persistCollectedProjects(collectedProjects: GithubProject[
   return { createdProjects, duplicateCount, updatedDuplicateCount, unchangedDuplicateCount }
 }
 
-export async function searchProjectsFromDatabase(filters: { query: string; languages: string[]; sourceGithubUsername: string | null }) {
+export async function getHomeMetrics(): Promise<HomeMetrics> {
+  const db = getDb()
+  const [projectCountRow, sourceRows] = await Promise.all([
+    db.select({ value: count() }).from(projects).where(isNull(projects.deletedAt)),
+    db.select({ sourceGithubUsername: projects.sourceGithubUsername }).from(projects).where(isNull(projects.deletedAt)).orderBy(asc(projects.sourceGithubUsername)),
+  ])
+
+  return {
+    projectCount: projectCountRow[0]?.value ?? 0,
+    sourceUsernames: Array.from(new Set(sourceRows.map((row) => row.sourceGithubUsername))),
+  }
+}
+
+export async function getLatestProjects(limit: number) {
+  const db = getDb()
+  const rows = await db.select().from(projects).where(isNull(projects.deletedAt)).orderBy(sql`${projects.starAt} desc`).limit(Math.max(1, limit))
+
+  return rows.map(toGithubProject)
+}
+
+export async function getProjectMapByRepositoryIds(repositoryIds: string[]) {
+  if (repositoryIds.length === 0) {
+    return new Map<string, GithubProject>()
+  }
+
+  const db = getDb()
+  const rows = await db.select().from(projects).where(and(isNull(projects.deletedAt), sql`${projects.repositoryId} = any(${repositoryIds})`))
+
+  return new Map(rows.map((project) => {
+    const mappedProject = toGithubProject(project)
+
+    return [mappedProject.repositoryId, mappedProject] as const
+  }))
+}
+
+export async function searchProjectsFromDatabase(filters: { query: string; languages: string[]; sourceGithubUsername: string | null; page: number; pageSize: number }) {
   const db = getDb()
   const query = filters.query.trim()
   const conditions = [isNull(projects.deletedAt)]
@@ -79,6 +119,7 @@ export async function searchProjectsFromDatabase(filters: { query: string; langu
       ilike(projects.name, keyword),
       ilike(projects.fullName, keyword),
       ilike(projects.description, keyword),
+      ilike(projects.readmeSummary, keyword),
       ilike(projects.readmeContent, keyword),
     )!)
   }
@@ -91,9 +132,26 @@ export async function searchProjectsFromDatabase(filters: { query: string; langu
     conditions.push(eq(projects.sourceGithubUsername, filters.sourceGithubUsername))
   }
 
-  const rows = await db.select().from(projects).where(and(...conditions)).limit(100)
+  const page = Math.max(1, filters.page)
+  const pageSize = Math.max(1, filters.pageSize)
+  const offset = (page - 1) * pageSize
+  const where = and(...conditions)
+  const [rows, totalRows] = await Promise.all([
+    db.select().from(projects).where(where).limit(pageSize).offset(offset),
+    db.select({ value: count() }).from(projects).where(where),
+  ])
 
-  return rows.map(toGithubProject)
+  return {
+    projects: rows.map(toGithubProject),
+    totalCount: totalRows[0]?.value ?? 0,
+  }
+}
+
+export async function listCollectedSourceGithubUsernames() {
+  const db = getDb()
+  const rows = await db.select({ sourceGithubUsername: projects.sourceGithubUsername }).from(projects).where(isNull(projects.deletedAt)).orderBy(asc(projects.sourceGithubUsername))
+
+  return Array.from(new Set(rows.map((row) => row.sourceGithubUsername)))
 }
 
 export async function getProjectByRepositoryId(repositoryId: string) {
