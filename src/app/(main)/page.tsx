@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { AppShell } from '@/components/app/app-shell'
 import { StatusBadge } from '@/components/app/status-badge'
 import { ProjectCard } from '@/components/projects/project-card'
 import { getHomeMetrics, getLatestProjects } from '@/lib/projects-repository'
@@ -13,11 +12,10 @@ export default async function Home() {
   const hasMoreSources = metrics.sourceUsernames.length > 4
 
   return (
-    <AppShell currentPath="/">
-      <main className="space-y-8">
-        <section className="rounded-3xl bg-green-600 px-6 py-10 text-white shadow-sm sm:px-8 sm:py-12">
+    <main className="space-y-8">
+        <section className="rounded-3xl bg-green-600 px-6 py-10 text-white shadow-sm sm:px-8 sm:py-10">
           <div className="mx-auto max-w-3xl space-y-4 text-center">
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">InsightRadar</h1>
+            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">智源雷达 InsightRadar</h1>
             <p className="text-base text-emerald-50 sm:text-lg">找到 GitHub 上最有价值的开源项目</p>
           </div>
         </section>
@@ -63,7 +61,6 @@ export default async function Home() {
           </div>
         </section>
       </main>
-    </AppShell>
   )
 }
 

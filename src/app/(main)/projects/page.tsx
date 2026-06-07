@@ -1,9 +1,8 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { AppShell } from '@/components/app/app-shell'
-import { CollectionJobStatusCard } from '@/components/collect/collection-job-status-card'
-import { GithubUsernameForm } from '@/components/collect/github-username-form'
+import { CollectionJobStatusCard } from '@/components/projects/collection-job-status-card'
+import { GithubUsernameForm } from '@/components/projects/github-username-form'
 import { ProjectCard } from '@/components/projects/project-card'
 import { ProjectPagination } from '@/components/projects/project-pagination'
 import { useBrowserStorage } from '@/lib/browser-storage'
@@ -160,8 +159,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <AppShell currentPath="/projects">
-      <main className="space-y-6">
+    <main className="space-y-6">
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">创建项目库</h2>
@@ -226,7 +224,6 @@ export default function ProjectsPage() {
           ) : null}
         </section>
       </main>
-    </AppShell>
   )
 }
 

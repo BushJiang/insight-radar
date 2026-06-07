@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 
 const navigationItems = [
@@ -9,12 +12,9 @@ const navigationItems = [
   { href: '/settings', label: '用户设置' },
 ]
 
-interface AppShellProps {
-  children: ReactNode
-  currentPath?: string
-}
+export function AppShell({ children }: { children: ReactNode }) {
+  const currentPath = usePathname()
 
-export function AppShell({ children, currentPath = '/' }: AppShellProps) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
       <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r border-slate-200 bg-white/90 px-4 py-6 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 lg:block">

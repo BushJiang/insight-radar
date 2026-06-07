@@ -1,5 +1,4 @@
 import { notFound } from 'next/navigation'
-import { AppShell } from '@/components/app/app-shell'
 import { getProjectByRepositoryId } from '@/lib/projects-repository'
 import type { ProjectMaturity } from '@/types/insight-radar'
 
@@ -23,8 +22,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   }
 
   return (
-    <AppShell currentPath="/projects">
-      <main className="space-y-6">
+    <main className="space-y-6">
         <section className="rounded-3xl border border-emerald-100 bg-emerald-50 p-6 shadow-sm dark:border-emerald-900 dark:bg-emerald-950/40">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
@@ -86,7 +84,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           <pre className="max-h-[640px] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-950 p-5 text-sm leading-7 text-slate-100">{project.readmeContent || '暂无 README 原文。'}</pre>
         </DetailCard>
       </main>
-    </AppShell>
   )
 }
 

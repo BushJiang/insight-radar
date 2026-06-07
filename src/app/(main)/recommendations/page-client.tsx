@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { AppShell } from '@/components/app/app-shell'
 import { RecommendationExplanationCard } from '@/components/recommendations/recommendation-explanation-card'
 import { RecommendationRequestPanel } from '@/components/recommendations/recommendation-request-panel'
 import { getDefaultPreference, normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
@@ -194,8 +193,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   }, [filters])
 
   return (
-    <AppShell currentPath="/recommendations">
-      <main className="space-y-6">
+    <main className="space-y-6">
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">智能推荐</h2>
@@ -244,7 +242,6 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
           )}
         </section>
       </main>
-    </AppShell>
   )
 }
 

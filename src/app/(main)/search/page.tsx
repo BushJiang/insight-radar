@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { AppShell } from '@/components/app/app-shell'
 import { ProjectCard } from '@/components/projects/project-card'
 import { ProjectPagination } from '@/components/projects/project-pagination'
 import { ProjectSearchBar } from '@/components/projects/project-search-bar'
@@ -130,8 +129,7 @@ export default function SearchPage() {
   )
 
   return (
-    <AppShell currentPath="/search">
-      <main className="space-y-6">
+    <main className="space-y-6">
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">项目搜索</h2>
@@ -177,6 +175,5 @@ export default function SearchPage() {
           )}
         </section>
       </main>
-    </AppShell>
   )
 }
