@@ -4,9 +4,9 @@ import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForP
 import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
 const projectProfileMaxLength = 280
-const maxGeneratedProfilesPerRequest = 10
+const maxGeneratedProfilesPerRequest = 20
 const aiGenerateTimeoutMs = 30_000
-const aiGenerateConcurrency = 3
+const aiGenerateConcurrency = 10
 
 export async function ensureProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
   const totalMissingCount = await countProjectsMissingProfiles(filters)
@@ -149,7 +149,7 @@ async function generateProjectProfile(project: GithubProject, prompt: string) {
   const agent = mastra.getAgent('projectProfileAgent')
   const generatePromise = agent.generate(buildProjectProfilePrompt(project, prompt), {
     modelSettings: {
-      maxOutputTokens: 320,
+      maxOutputTokens: 1024,
       temperature: 0.2,
     },
   })
@@ -158,6 +158,13 @@ async function generateProjectProfile(project: GithubProject, prompt: string) {
   )
 
   const result = await Promise.race([generatePromise, timeoutPromise])
+
+  if (!result.text?.trim()) {
+    console.warn(`[project-profile] AI 返回空文本: ${project.fullName}`)
+    console.warn(`[project-profile] result.text 类型: ${typeof result.text}, 值: ${JSON.stringify(result.text)}`)
+    console.warn(`[project-profile] result 键: ${Object.keys(result).join(', ')}`)
+  }
+
   const profile = resolveProjectProfile(result.text, project)
 
   return truncateProjectProfile(profile)
@@ -169,10 +176,8 @@ function resolveProjectProfile(text: string | undefined, project: GithubProject)
   return profile || buildFallbackProjectProfile(project)
 }
 
-function buildFallbackProjectProfile(project: GithubProject) {
-  const description = project.description.trim() || `${project.fullName} 是一个以 ${project.language} 为主要语言的开源项目。`
-
-  return `${project.name}：${description}`
+function buildFallbackProjectProfile(_project: GithubProject) {
+  return '暂无项目简介。'
 }
 
 function truncateProjectProfile(profile: string) {
@@ -180,7 +185,9 @@ function truncateProjectProfile(profile: string) {
 }
 
 function buildProjectProfilePrompt(project: GithubProject, prompt: string) {
-  const readme = project.readmeContent ? project.readmeContent.slice(0, 8000) : '暂无 README。'
+  const readme = project.readmeContent
+    ? stripHtml(project.readmeContent).slice(0, 500)
+    : '暂无 README。'
 
   return `${prompt}
 
@@ -190,4 +197,12 @@ function buildProjectProfilePrompt(project: GithubProject, prompt: string) {
 - 项目描述：${project.description}
 - 主要语言：${project.language}
 - README：${readme}`
+}
+
+function stripHtml(text: string) {
+  return text
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&[a-z]+;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

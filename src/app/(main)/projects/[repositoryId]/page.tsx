@@ -61,8 +61,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             <DetailRow label="标星时间" value={formatDate(project.starAt)} />
             <DetailRow label="最后活跃" value={formatDate(project.pushedAt ?? project.updatedAt)} />
             <DetailRow label="GitHub 更新" value={formatDate(project.githubUpdatedAt ?? project.updatedAt)} />
-            <DetailRow label="数据创建" value={project.id ? '已入库' : '暂无'} />
-            <DetailRow label="软删除" value={project.deletedAt ? formatDate(project.deletedAt) : '未删除'} />
           </DetailCard>
 
           <DetailCard title="标签">
