@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation'
 import { getProjectByRepositoryId } from '@/lib/projects-repository'
 import type { ProjectMaturity } from '@/types/insight-radar'
 
+export const revalidate = 3600
+
 interface ProjectDetailPageProps {
   params: Promise<{ repositoryId: string }>
 }
@@ -80,9 +82,6 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-200">{project.readmeSummary || '暂无项目简介。'}</p>
         </DetailCard>
 
-        <DetailCard title="README 原文">
-          <pre className="max-h-[640px] overflow-auto whitespace-pre-wrap rounded-2xl bg-slate-950 p-5 text-sm leading-7 text-slate-100">{project.readmeContent || '暂无 README 原文。'}</pre>
-        </DetailCard>
       </main>
   )
 }

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { RecommendationExplanationCard } from '@/components/recommendations/recommendation-explanation-card'
 import { RecommendationRequestPanel } from '@/components/recommendations/recommendation-request-panel'
+import { EmptyState } from '@/components/shared/empty-state'
+import { ErrorMessage } from '@/components/shared/error-message'
 import { getDefaultPreference, normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
 import { readBrowserStorage } from '@/lib/browser-storage'
 import { readTransientFormState, writeTransientRecommendationFormState } from '@/lib/transient-form-state'
@@ -137,14 +139,13 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   const handleGenerateProfiles = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setProgress({ status: 'running', completedCount: 0, totalCount: 1, message: '正在准备生成项目简介' })
 
     try {
-      let processedRepositoryIds: string[] = []
       let stableProgress = initialProgress
 
       while (true) {
-        const result = await requestProjectProfiles('generate', filters, processedRepositoryIds)
-        processedRepositoryIds = result.processedRepositoryIds
+        const result = await requestProjectProfiles('generate', filters, [])
         stableProgress = resolveStableProgress(stableProgress, result.progress)
 
         setProgress(stableProgress)
@@ -156,9 +157,11 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
         if (result.progress.status !== 'running') {
           return
         }
+        // 轮询间延迟，避免空转浪费资源
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
     } catch {
-      setError('项目简介生成失败，请稍后重试。')
+      setError('生成过程中网络异常，已生成的项目简介已保存。可重新点击按钮继续。')
     } finally {
       setLoading(false)
     }
@@ -167,6 +170,8 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   const handleRegenerateProfiles = useCallback(async () => {
     setLoading(true)
     setError(null)
+    // 立即显示进度条，避免 AI 生成期间（10-30s）UI 无反馈
+    setProgress({ status: 'running', completedCount: 0, totalCount: 1, message: '正在准备重新生成项目简介' })
 
     try {
       let processedRepositoryIds: string[] = []
@@ -181,12 +186,23 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
           return
         }
 
+        if (result.progress.status === 'ready') {
+          setProgress(result.progress)
+          // API 在再生完成时直接返回最新项目数据，无需额外请求
+          if (result.projects.length > 0) {
+            setProjects(result.projects)
+            writeTransientRecommendationFormState({ projects: result.projects })
+          }
+          return
+        }
+
         if (result.progress.status !== 'running') {
           return
         }
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
     } catch {
-      setError('项目简介生成失败，请稍后重试。')
+      setError('重新生成过程中网络异常，已生成的项目简介已保存。可重新点击按钮继续。')
     } finally {
       setLoading(false)
     }
@@ -226,7 +242,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
             onRegenerateProfiles={() => void handleRegenerateProfiles()}
           />
           <ProjectProfileProgressCard progress={progress} />
-          {error ? <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200">{error}</div> : null}
+          {error ? <ErrorMessage message={error} /> : null}
         </section>
 
         <section className="space-y-4">
@@ -236,9 +252,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
           {recommendations.length > 0 ? recommendations.map((recommendation) => (
             <RecommendationExplanationCard key={recommendation.id} recommendation={recommendation} projects={projects} />
           )) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              输入项目需求并点击智能推荐后，这里会展示推荐结果。
-            </div>
+            <EmptyState message="输入项目需求并点击智能推荐后，这里会展示推荐结果。" />
           )}
         </section>
       </main>
@@ -256,7 +270,7 @@ async function requestProjectProfiles(action: 'status' | 'generate' | 'regenerat
       processedRepositoryIds,
     }),
   })
-  const result = await response.json() as { progress: ProjectProfileProgress; processedRepositoryIds: string[]; error: string | null }
+  const result = await response.json() as { progress: ProjectProfileProgress; processedRepositoryIds: string[]; projects: GithubProject[]; error: string | null }
 
   if (!response.ok && !result.error) {
     return { ...result, error: '项目简介生成失败，请稍后重试。' }

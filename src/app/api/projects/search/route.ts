@@ -1,3 +1,4 @@
+import { resolveErrorMessage } from '@/lib/api-response'
 import { listCollectedSourceGithubUsernames, searchProjectsFromDatabase } from '@/lib/projects-repository'
 import type { SearchProjectsRequest, SearchProjectsResponse } from '@/types/insight-radar'
 
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
       projects: [],
       totalCount: 0,
       sources: [],
-      error: error instanceof Error ? error.message : '项目搜索失败，请稍后重试。',
+      error: resolveErrorMessage(error, '项目搜索失败，请稍后重试。'),
     }
 
     return Response.json(response, { status: 500 })

@@ -1,3 +1,4 @@
+import { resolveErrorMessage } from '@/lib/api-response'
 import { normalizePreference } from '@/lib/default-preference'
 import { generateMissingProjectProfiles, getProjectProfileStatus, regenerateProjectProfiles } from '@/lib/project-profile-service'
 import type { GithubProject, ProjectMaturity, ProjectProfileProgress, UserPreference } from '@/types/insight-radar'
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
     const response: ProjectProfilesResponseBody = {
       progress: profileResult,
       processedRepositoryIds: profileResult.processedRepositoryIds,
-      projects: [],
+      projects: (profileResult as { updatedProjects?: GithubProject[] }).updatedProjects ?? [],
       error: null,
     }
 
@@ -54,11 +55,11 @@ export async function POST(req: Request) {
         status: 'failed',
         completedCount: 0,
         totalCount: 0,
-        message: error instanceof Error ? error.message : '项目简介生成失败，请稍后重试。',
+        message: resolveErrorMessage(error, '项目简介生成失败，请稍后重试。'),
       },
       processedRepositoryIds: [],
       projects: [],
-      error: error instanceof Error ? error.message : '项目简介生成失败，请稍后重试。',
+      error: resolveErrorMessage(error, '项目简介生成失败，请稍后重试。'),
     }
 
     return Response.json(response, { status: 500 })

@@ -113,11 +113,6 @@ export interface ProjectsPageSnapshot {
   updatedAt: string | null
 }
 
-export interface SearchPageSnapshot {
-  items: GithubProject[]
-  updatedAt: string | null
-}
-
 export interface GithubStarredSearchRequest {
   filters: ProjectSearchFilters
   githubToken?: string

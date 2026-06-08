@@ -1,10 +1,12 @@
 import { createHash } from 'crypto'
 import { mastra } from '@/mastra'
-import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, updateProjectProfile } from '@/lib/projects-repository'
+import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, searchProjectsFromDatabase, updateProjectProfile } from '@/lib/projects-repository'
 import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
 const projectProfileMaxLength = 280
 const maxGeneratedProfilesPerRequest = 10
+const aiGenerateTimeoutMs = 30_000
+const aiGenerateConcurrency = 3
 
 export async function ensureProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
   const totalMissingCount = await countProjectsMissingProfiles(filters)
@@ -40,7 +42,7 @@ export async function generateMissingProjectProfiles(filters: ProjectSearchFilte
   return ensureProjectProfiles(filters, preference)
 }
 
-export async function regenerateProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference, processedRepositoryIds: string[] = []): Promise<ProjectProfileProgress & { processedRepositoryIds: string[] }> {
+export async function regenerateProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference, processedRepositoryIds: string[] = []): Promise<ProjectProfileProgress & { processedRepositoryIds: string[]; updatedProjects: GithubProject[] }> {
   const totalCount = await countProjectsForFilters(filters)
 
   if (totalCount === 0) {
@@ -50,6 +52,7 @@ export async function regenerateProjectProfiles(filters: ProjectSearchFilters, p
       totalCount: 0,
       message: null,
       processedRepositoryIds,
+      updatedProjects: [],
     }
   }
 
@@ -66,6 +69,7 @@ export async function regenerateProjectProfiles(filters: ProjectSearchFilters, p
       totalCount,
       message: null,
       processedRepositoryIds,
+      updatedProjects: [],
     }
   }
 
@@ -73,24 +77,41 @@ export async function regenerateProjectProfiles(filters: ProjectSearchFilters, p
 
   const nextProcessedRepositoryIds = [...processedRepositoryIds, ...projects.map((project) => project.repositoryId)]
   const completedCount = Math.min(totalCount, nextProcessedRepositoryIds.length)
+  const isReady = completedCount >= totalCount
+
+  // 再生全部完成时，返回最新项目数据，前端无需额外请求
+  const updatedProjects = isReady
+    ? (await searchProjectsFromDatabase({ ...filters, page: 1, pageSize: 50 })).projects
+    : []
 
   return {
-    status: completedCount >= totalCount ? 'ready' : 'running',
+    status: isReady ? 'ready' : 'running',
     completedCount,
     totalCount,
-    message: completedCount >= totalCount ? null : '正在重新生成项目简介',
+    message: isReady ? null : '正在重新生成项目简介',
     processedRepositoryIds: nextProcessedRepositoryIds,
+    updatedProjects,
   }
 }
 
 async function generateAndSaveProjectProfiles(projects: GithubProject[], preference: UserPreference, force: boolean) {
-  await Promise.all(projects.map(async (project) => {
-    if (!force && project.readmeSummary?.trim()) {
-      return
-    }
+  const tasks = projects
+    .filter((project) => force || !project.readmeSummary?.trim())
+    .map((project) => async () => {
+      try {
+        const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
+        await updateProjectProfile(project.repositoryId, profile)
+      } catch (error) {
+        console.error(`项目简介生成失败 ${project.repositoryId}:`, error instanceof Error ? error.message : String(error))
+      }
+    })
 
-    const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
-    await updateProjectProfile(project.repositoryId, profile)
+  const workers = Array.from({ length: aiGenerateConcurrency })
+  await Promise.all(workers.map(async () => {
+    while (tasks.length > 0) {
+      const task = tasks.shift()
+      if (task) await task()
+    }
   }))
 }
 
@@ -126,12 +147,17 @@ export function buildProfileHash(project: GithubProject) {
 
 async function generateProjectProfile(project: GithubProject, prompt: string) {
   const agent = mastra.getAgent('projectProfileAgent')
-  const result = await agent.generate(buildProjectProfilePrompt(project, prompt), {
+  const generatePromise = agent.generate(buildProjectProfilePrompt(project, prompt), {
     modelSettings: {
       maxOutputTokens: 320,
       temperature: 0.2,
     },
   })
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`AI 生成超时 (${project.repositoryId})`)), aiGenerateTimeoutMs),
+  )
+
+  const result = await Promise.race([generatePromise, timeoutPromise])
   const profile = resolveProjectProfile(result.text, project)
 
   return truncateProjectProfile(profile)
@@ -163,7 +189,5 @@ function buildProjectProfilePrompt(project: GithubProject, prompt: string) {
 - 仓库全名：${project.fullName}
 - 项目描述：${project.description}
 - 主要语言：${project.language}
-- README：${readme}
-
-请只输出项目简介正文，不要返回 JSON，不要添加标题或解释。项目简介必须是不超过 200 个中文字符的完整字符串。`
+- README：${readme}`
 }

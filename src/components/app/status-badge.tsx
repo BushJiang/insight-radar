@@ -1,6 +1,6 @@
 import type { CollectionJobStatus, RecommendationConfidence } from '@/types/insight-radar'
 
-type StatusBadgeVariant = CollectionJobStatus | RecommendationConfidence | 'mock'
+type StatusBadgeVariant = CollectionJobStatus | RecommendationConfidence | 'neutral'
 
 const statusClassNames: Record<StatusBadgeVariant, string> = {
   pending: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200',
@@ -11,7 +11,7 @@ const statusClassNames: Record<StatusBadgeVariant, string> = {
   high: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200',
   medium: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200',
   low: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200',
-  mock: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200',
+  neutral: 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200',
 }
 
 const statusLabels: Record<StatusBadgeVariant, string> = {
@@ -23,7 +23,7 @@ const statusLabels: Record<StatusBadgeVariant, string> = {
   high: '高置信',
   medium: '中置信',
   low: '低置信',
-  mock: 'Mock 模式',
+  neutral: '中性',
 }
 
 interface StatusBadgeProps {

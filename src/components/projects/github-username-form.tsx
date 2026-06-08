@@ -221,7 +221,7 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
           value={maxProjects}
           onChange={(event) => onMaxProjectsChange(event.target.value)}
           disabled={isCollecting}
-          className="h-[46px] w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-[20px] text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200"
+          className="h-11.5 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-5 text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200"
           placeholder="0 表示全部"
         />
       </div>
@@ -232,7 +232,7 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
         <button
           type="submit"
           disabled={isCollecting}
-          className="inline-flex h-[46px] min-w-24 cursor-pointer items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
+          className="inline-flex h-11.5 min-w-24 cursor-pointer items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
         >
           {isCollecting ? '采集中' : '开始采集'}
         </button>

@@ -1,3 +1,4 @@
+import { resolveErrorMessage } from '@/lib/api-response'
 import { normalizePreference } from '@/lib/default-preference'
 import { generateProjectRecommendations } from '@/lib/recommendation-service'
 import type { ProjectProfileProgress, RecommendationExplanation, UserPreference, GithubProject } from '@/types/insight-radar'
@@ -51,11 +52,11 @@ export async function POST(req: Request) {
         status: 'failed',
         completedCount: 0,
         totalCount: 0,
-        message: error instanceof Error ? error.message : '智能推荐失败，请稍后重试。',
+        message: resolveErrorMessage(error, '智能推荐失败，请稍后重试。'),
       },
       recommendation: null,
       projects: [],
-      error: error instanceof Error ? error.message : '智能推荐失败，请稍后重试。',
+      error: resolveErrorMessage(error, '智能推荐失败，请稍后重试。'),
     }
 
     return Response.json(response, { status: 500 })

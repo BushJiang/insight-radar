@@ -30,6 +30,7 @@ export function ProjectSearchBar({ filters, sources, loading = false, onSearch, 
             type="search"
             value={filters.query}
             onChange={(event) => onChange({ query: event.target.value })}
+            onKeyDown={(event) => { if (event.key === 'Enter') onSearch() }}
             className="mt-2 h-[46px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
             placeholder="输入关键词，搜索项目名称、描述、README"
           />

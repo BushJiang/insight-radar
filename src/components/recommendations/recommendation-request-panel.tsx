@@ -61,19 +61,19 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
             max={50}
             value={recommendationLimit}
             onChange={(event) => onRecommendationLimitChange(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
-            className="mt-2 h-[46px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition dark:border-slate-700 dark:bg-white dark:text-black"
+            className="mt-2 h-11.5 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition dark:border-slate-700 dark:bg-white dark:text-black"
           />
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <button type="submit" disabled={loading || profileRunning} className="h-[46px] cursor-pointer rounded-xl bg-brand-primary px-5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400">
+        <button type="submit" disabled={loading || profileRunning} className="h-11.5 cursor-pointer rounded-xl bg-brand-primary px-5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400">
           {recommending ? '正在推荐' : '智能推荐'}
         </button>
-        <button type="button" disabled={loading || profileRunning || !canGenerateProfiles} onClick={onGenerateProfiles} className="h-[46px] cursor-pointer rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
+        <button type="button" disabled={loading || profileRunning || !canGenerateProfiles} onClick={onGenerateProfiles} className="h-11.5 cursor-pointer rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
           生成项目简介
         </button>
-        <button type="button" disabled={loading || profileRunning} onClick={onRegenerateProfiles} className="h-[46px] cursor-pointer rounded-xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-900 dark:disabled:bg-slate-800 dark:disabled:text-slate-500">
+        <button type="button" disabled={loading || profileRunning} onClick={onRegenerateProfiles} className="h-11.5 cursor-pointer rounded-xl border border-slate-200 bg-brand-primary px-5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400">
           重新生成项目简介
         </button>
       </div>
@@ -105,7 +105,7 @@ function SelectFilter({ label, value, options, allLabel, optionLabels, onChange,
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onFocus={onFocus}
-        className="mt-2 h-[46px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition dark:border-slate-700 dark:bg-white dark:text-black"
+        className="mt-2 h-11.5 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition dark:border-slate-700 dark:bg-white dark:text-black"
       >
         {allLabel ? <option value="">{allLabel}</option> : null}
         {options.map((option) => (

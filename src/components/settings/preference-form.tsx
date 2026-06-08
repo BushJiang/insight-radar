@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
-import { writeBrowserStorage } from '@/lib/browser-storage'
+import { readBrowserStorage, writeBrowserStorage } from '@/lib/browser-storage'
 import type { UserPreference } from '@/types/insight-radar'
 
 interface PreferenceFormProps {
@@ -19,11 +19,15 @@ const unlimitedDomain = '不限领域'
 const domains = [unlimitedDomain, '智能体', '前端', '后端', '数据库', 'AI 工具', '开发工具', '基础设施']
 
 export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
-  const [savedState, setSavedState] = useState<PreferenceFormState>(() => ({
-    preference: normalizePreference(initialPreference),
-    otherDomainEnabled: false,
-    otherDomain: '',
-  }))
+  const [savedState, setSavedState] = useState<PreferenceFormState>(() => {
+    const saved = readBrowserStorage(preferenceStorageKey, null)
+
+    return {
+      preference: saved ? normalizePreference(saved) : normalizePreference(initialPreference),
+      otherDomainEnabled: false,
+      otherDomain: '',
+    }
+  })
   const [saved, setSaved] = useState(false)
   const { preference, otherDomainEnabled, otherDomain } = savedState
 

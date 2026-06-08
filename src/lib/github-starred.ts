@@ -3,33 +3,80 @@ import type { GithubProject, GithubStarredSearchResponse, ProjectMaturity, Proje
 
 const githubStarredPageSize = 100
 const defaultMaxFetchedRepositories = 500
+const githubGraphqlEndpoint = 'https://api.github.com/graphql'
 
-interface GithubStarredRepository {
-  starred_at: string
-  repo: {
-    id: number
+const starredReposQuery = `
+query($username: String!, $first: Int!, $after: String) {
+  user(login: $username) {
+    starredRepositories(
+      first: $first
+      after: $after
+      orderBy: {field: STARRED_AT, direction: DESC}
+    ) {
+      totalCount
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        starredAt
+        node {
+          databaseId
+          name
+          nameWithOwner
+          description
+          url
+          stargazerCount
+          forkCount
+          primaryLanguage { name }
+          licenseInfo { spdxId name }
+          repositoryTopics(first: 20) { nodes { topic { name } } }
+          isFork
+          parent { nameWithOwner url }
+          defaultBranchRef { name }
+          updatedAt
+          pushedAt
+          issues(states: OPEN) { totalCount }
+        }
+      }
+    }
+  }
+}`
+
+// GraphQL 响应类型
+interface GraphqlStarredEdge {
+  starredAt: string
+  node: {
+    databaseId: number
     name: string
-    full_name: string
+    nameWithOwner: string
     description: string | null
-    html_url: string
-    default_branch?: string
-    language: string | null
-    stargazers_count: number
-    forks_count: number
-    open_issues_count: number
-    updated_at: string
-    pushed_at: string | null
-    topics?: string[]
-    license?: { spdx_id: string | null; name: string | null } | null
-    fork: boolean
-    source?: { full_name: string; html_url: string } | null
-    parent?: { full_name: string; html_url: string } | null
+    url: string
+    stargazerCount: number
+    forkCount: number
+    primaryLanguage: { name: string } | null
+    licenseInfo: { spdxId: string | null; name: string | null } | null
+    repositoryTopics: { nodes: Array<{ topic: { name: string } }> }
+    isFork: boolean
+    parent: { nameWithOwner: string; url: string } | null
+    defaultBranchRef: { name: string } | null
+    updatedAt: string
+    pushedAt: string | null
+    issues: { totalCount: number }
   }
 }
 
-interface FetchStarredRepositoriesResult {
-  repositories: GithubStarredRepository[]
-  estimatedTotalCount: number | null
+interface GraphqlStarredResponse {
+  data?: {
+    user?: {
+      starredRepositories: {
+        totalCount: number
+        pageInfo: { hasNextPage: boolean; endCursor: string | null }
+        edges: GraphqlStarredEdge[]
+      }
+    }
+  }
+  errors?: Array<{ message: string }>
 }
 
 interface SearchGithubStarredProjectsOptions {
@@ -45,8 +92,8 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
     throw new GithubApiError('请输入来源账号后再搜索。', 400)
   }
 
-  const { repositories, estimatedTotalCount } = await fetchStarredRepositories(username, filters.days, maxProjects ?? defaultMaxFetchedRepositories, githubToken?.trim())
-  const collectedProjects = await Promise.all(repositories.map((repository) => mapRepositoryToProject(repository, username, githubToken?.trim())))
+  const { edges, totalCount } = await fetchStarredReposViaGraphql(username, filters.days, maxProjects ?? defaultMaxFetchedRepositories, githubToken?.trim())
+  const collectedProjects = await Promise.all(edges.map((edge) => mapRepoEdgeToProject(edge, username, githubToken?.trim())))
   const persistedResult = await persistCollectedProjects(collectedProjects)
   const projects = filters.query.trim()
     ? (await searchProjectsFromDatabase({
@@ -56,102 +103,137 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
       sourceGithubUsername: filters.sourceGithubUsername,
       days: filters.days,
       page: 1,
-      pageSize: repositories.length || 1,
+      pageSize: edges.length || 1,
     })).projects
     : collectedProjects
 
   return {
     projects,
     totalCount: projects.length,
-    fetchedCount: repositories.length,
+    fetchedCount: edges.length,
     duplicateCount: persistedResult.duplicateCount,
     updatedDuplicateCount: persistedResult.updatedDuplicateCount,
     unchangedDuplicateCount: persistedResult.unchangedDuplicateCount,
-    estimatedTotalCount,
+    estimatedTotalCount: totalCount,
     rateLimitRemaining: null,
     rateLimitResetAt: null,
     error: null,
   }
 }
 
-async function fetchStarredRepositories(username: string, days: number | null, maxProjects: number, githubToken?: string): Promise<FetchStarredRepositoriesResult> {
-  const repositories: GithubStarredRepository[] = []
+async function fetchStarredReposViaGraphql(username: string, days: number | null, maxProjects: number, githubToken?: string) {
+  const edges: GraphqlStarredEdge[] = []
   const cutoff = days ? Date.now() - days * 24 * 60 * 60 * 1000 : null
   const fetchLimit = maxProjects === 0 ? Number.POSITIVE_INFINITY : Math.max(1, maxProjects)
-  let estimatedTotalCount: number | null = null
+  let totalCount: number | null = null
+  let cursor: string | null = null
+  let hasNextPage = true
 
-  for (let page = 1; repositories.length < fetchLimit; page += 1) {
-    const url = new URL(`https://api.github.com/users/${encodeURIComponent(username)}/starred`)
-    url.searchParams.set('sort', 'created')
-    url.searchParams.set('direction', 'desc')
-    url.searchParams.set('per_page', String(githubStarredPageSize))
-    url.searchParams.set('page', String(page))
-
-    const response = await fetch(url, {
-      headers: buildGithubHeaders(githubToken),
-      next: { revalidate: 300 },
+  while (hasNextPage && edges.length < fetchLimit) {
+    const remaining = Math.min(githubStarredPageSize, fetchLimit - edges.length)
+    const response = await fetch(githubGraphqlEndpoint, {
+      method: 'POST',
+      headers: buildGraphqlHeaders(githubToken),
+      body: JSON.stringify({
+        query: starredReposQuery,
+        variables: { username, first: remaining, after: cursor },
+      }),
     })
 
     if (!response.ok) {
       throw await buildGithubError(response)
     }
 
-    const pageItems = await response.json() as GithubStarredRepository[]
+    const body = await response.json() as GraphqlStarredResponse
 
-    if (page === 1) {
-      estimatedTotalCount = estimateTotalCount(response.headers.get('Link'), pageItems.length, fetchLimit)
+    if (body.errors?.length) {
+      throw new GithubApiError(body.errors.map((e) => e.message).join('; '), 400)
     }
 
-    if (pageItems.length === 0) {
-      break
+    const starred = body.data?.user?.starredRepositories
+
+    if (!starred) {
+      throw new GithubApiError('GitHub 账号不存在，或该账号的 Star 列表不可访问。', 404)
     }
 
-    for (const item of pageItems) {
-      if (cutoff && new Date(item.starred_at).getTime() < cutoff) {
-        return { repositories, estimatedTotalCount: repositories.length }
+    totalCount = starred.totalCount
+    hasNextPage = starred.pageInfo.hasNextPage
+    cursor = starred.pageInfo.endCursor
+
+    for (const edge of starred.edges) {
+      if (cutoff && new Date(edge.starredAt).getTime() < cutoff) {
+        return { edges, totalCount }
       }
 
-      repositories.push(item)
+      edges.push(edge)
 
-      if (repositories.length >= fetchLimit) {
+      if (edges.length >= fetchLimit) {
         break
       }
     }
-
-    if (pageItems.length < githubStarredPageSize) {
-      break
-    }
   }
 
-  return { repositories, estimatedTotalCount: estimatedTotalCount ?? repositories.length }
+  return { edges, totalCount: totalCount ?? edges.length }
 }
 
-function estimateTotalCount(linkHeader: string | null, firstPageCount: number, fetchLimit: number) {
-  if (firstPageCount === 0) {
-    return 0
+async function mapRepoEdgeToProject(edge: GraphqlStarredEdge, username: string, githubToken?: string): Promise<GithubProject> {
+  const node = edge.node
+  const language = node.primaryLanguage?.name || '其他'
+  const sourceRepository = node.parent ?? null
+  const readmeContent = await fetchReadmeViaApi(node.nameWithOwner, githubToken)
+
+  return {
+    repositoryId: String(node.databaseId),
+    fullName: node.nameWithOwner,
+    name: node.name,
+    description: node.description || '暂无描述',
+    language,
+    stars: node.stargazerCount,
+    forks: node.forkCount,
+    issues: node.issues.totalCount,
+    updatedAt: node.updatedAt,
+    githubUpdatedAt: node.updatedAt,
+    pushedAt: node.pushedAt,
+    readmeSummary: null,
+    readmeContent,
+    topics: node.repositoryTopics.nodes.map((n) => n.topic.name),
+    license: node.licenseInfo?.spdxId || node.licenseInfo?.name || null,
+    isFork: node.isFork,
+    sourceRepositoryFullName: sourceRepository?.nameWithOwner ?? null,
+    sourceRepositoryUrl: sourceRepository?.url ?? null,
+    sourceGithubUsername: username,
+    starAt: edge.starredAt,
+    sourceUrl: node.url,
+    matchReason: `${username} 在 ${formatDate(edge.starredAt)} Star 了该项目。`,
+    maturity: inferMaturity(node.stargazerCount, node.pushedAt ?? node.updatedAt),
+    collectionJobId: `github-starred-${username}`,
   }
-
-  const lastPageMatch = linkHeader?.match(/[?&]page=(\d+)[^>]*>; rel="last"/)
-  const rawTotal = lastPageMatch ? Number(lastPageMatch[1]) * githubStarredPageSize : firstPageCount
-
-  if (!Number.isFinite(fetchLimit)) {
-    return rawTotal
-  }
-
-  return Math.min(rawTotal, fetchLimit)
 }
 
-function buildGithubHeaders(githubToken?: string) {
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.github.star+json',
-    'X-GitHub-Api-Version': '2022-11-28',
+// README 通过 REST API 获取，可以正确处理任意文件名、大小写、子目录
+async function fetchReadmeViaApi(fullName: string, githubToken?: string) {
+  const url = `https://api.github.com/repos/${fullName}/readme`
+  const response = await fetch(url, {
+    headers: {
+      Accept: 'application/vnd.github.raw+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+    },
+    next: { revalidate: 3600 },
+  })
+
+  if (!response.ok) {
+    return null
   }
 
-  if (githubToken) {
-    headers.Authorization = `Bearer ${githubToken}`
-  }
+  return response.text()
+}
 
-  return headers
+function buildGraphqlHeaders(githubToken?: string) {
+  return {
+    'Content-Type': 'application/json',
+    ...(githubToken ? { Authorization: `Bearer ${githubToken}` } : {}),
+  }
 }
 
 async function buildGithubError(response: Response) {
@@ -170,58 +252,9 @@ async function buildGithubError(response: Response) {
   return new GithubApiError(`GitHub API 请求失败，状态码：${response.status}。`, response.status)
 }
 
-async function mapRepositoryToProject(item: GithubStarredRepository, username: string, githubToken?: string): Promise<GithubProject> {
-  const repo = item.repo
-  const language = repo.language || '其他'
-  const sourceRepository = repo.source ?? repo.parent ?? null
-  const readmeContent = await fetchReadmeContent(repo.full_name, repo.default_branch ?? 'main', githubToken)
-
-  return {
-    repositoryId: String(repo.id),
-    fullName: repo.full_name,
-    name: repo.name,
-    description: repo.description || '暂无描述',
-    language,
-    stars: repo.stargazers_count,
-    forks: repo.forks_count,
-    issues: repo.open_issues_count,
-    updatedAt: repo.updated_at,
-    githubUpdatedAt: repo.updated_at,
-    pushedAt: repo.pushed_at,
-    readmeSummary: null,
-    readmeContent,
-    topics: repo.topics ?? [],
-    license: repo.license?.spdx_id || repo.license?.name || null,
-    isFork: repo.fork,
-    sourceRepositoryFullName: sourceRepository?.full_name ?? null,
-    sourceRepositoryUrl: sourceRepository?.html_url ?? null,
-    sourceGithubUsername: username,
-    starAt: item.starred_at,
-    sourceUrl: repo.html_url,
-    matchReason: `${username} 在 ${formatDate(item.starred_at)} Star 了该项目。`,
-    maturity: inferMaturity(repo.stargazers_count, repo.pushed_at ?? repo.updated_at),
-    collectionJobId: `github-starred-${username}`,
-  }
-}
-
-async function fetchReadmeContent(fullName: string, defaultBranch: string, githubToken?: string) {
-  const url = `https://raw.githubusercontent.com/${fullName}/${defaultBranch}/README.md`
-  const response = await fetch(url, {
-    headers: githubToken ? { Authorization: `Bearer ${githubToken}` } : undefined,
-    next: { revalidate: 3600 },
-  })
-
-  if (!response.ok) {
-    return null
-  }
-
-  return response.text()
-}
-
 function inferMaturity(stars: number, pushedAt: string): ProjectMaturity {
   const inactiveDays = (Date.now() - new Date(pushedAt).getTime()) / 86_400_000
 
-  // 成熟度只看两个信号：最近是否还活跃，以及 Star 是否达到常见影响力门槛。
   if (inactiveDays > 365) {
     return 'stalled'
   }

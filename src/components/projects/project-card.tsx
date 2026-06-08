@@ -3,7 +3,6 @@ import type { GithubProject, ProjectMaturity } from '@/types/insight-radar'
 
 interface ProjectCardProps {
   project: GithubProject
-  recommendationReason?: string
 }
 
 const maturityLabels: Record<ProjectMaturity, string> = {
@@ -13,7 +12,7 @@ const maturityLabels: Record<ProjectMaturity, string> = {
   stalled: '停滞',
 }
 
-export function ProjectCard({ project, recommendationReason }: ProjectCardProps) {
+export function ProjectCard({ project }: ProjectCardProps) {
   const watchedAccounts = formatWatchedAccounts([project.sourceGithubUsername])
   const visibleTopics = project.topics.slice(0, 5)
 
@@ -52,7 +51,6 @@ export function ProjectCard({ project, recommendationReason }: ProjectCardProps)
         <InfoRow label="语言">{project.language}</InfoRow>
         <InfoRow label="关注账号">{watchedAccounts}</InfoRow>
         {project.readmeSummary ? <InfoRow label="项目简介">{project.readmeSummary}</InfoRow> : null}
-        {recommendationReason ? <InfoRow label="推荐理由">{recommendationReason}</InfoRow> : null}
       </dl>
     </article>
   )
