@@ -24,14 +24,14 @@ export function ProjectSearchBar({ filters, sources, loading = false, onSearch, 
           <Input
             id="query"
             type="search"
+            className="mt-2"
             value={filters.query}
             onChange={(event) => onChange({ query: event.target.value })}
             onKeyDown={(event) => { if (event.key === 'Enter') onSearch() }}
-            className="mt-2 h-[46px]"
             placeholder="输入关键词，搜索项目名称、描述、README"
           />
         </div>
-        <Button type="button" disabled={loading} onClick={onSearch} className="mt-7 h-[46px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-400">
+        <Button type="button" disabled={loading} onClick={onSearch} className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-400">
           搜索
         </Button>
       </div>

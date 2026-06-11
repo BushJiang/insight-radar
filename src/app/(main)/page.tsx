@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { StatusBadge } from '@/components/layout/status-badge'
 import { Container } from '@/components/shared/container'
 import { ProjectCard } from '@/components/projects/project-card'
+import { Button } from '@/components/ui/button'
 import { getHomeMetrics, getLatestProjects } from '@/lib/projects-repository'
 
 export const revalidate = 3600
@@ -31,9 +32,9 @@ export default async function Home() {
             <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">创建项目库</h2>
             <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">输入你认可的 GitHub 账号，采集其关注项目并沉淀到项目库。</p>
           </div>
-          <Link href="/projects" className="inline-flex h-[46px] items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 active:scale-95">
-            创建项目库
-          </Link>
+          <Button asChild className="bg-emerald-600 hover:bg-emerald-700 active:scale-95">
+            <Link href="/projects">创建项目库</Link>
+          </Button>
         </div>
       </section>
 

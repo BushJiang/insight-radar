@@ -40,8 +40,8 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
         id="recommendation-query"
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
+        className="mt-2"
         placeholder="描述你想找的项目"
-        className="mt-2 min-h-10"
       />
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -58,19 +58,19 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
             max={50}
             value={recommendationLimit}
             onChange={(event) => onRecommendationLimitChange(Math.max(1, Math.min(50, Number(event.target.value) || 1)))}
-            className="mt-2 h-11.5"
+            className="mt-2"
           />
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <Button type="submit" disabled={loading || profileRunning} className="h-11.5 bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
+        <Button type="submit" disabled={loading || profileRunning} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
           {recommending ? '正在推荐' : '智能推荐'}
         </Button>
-        <Button type="button" variant="outline" disabled={loading || profileRunning || !canGenerateProfiles} onClick={onGenerateProfiles} className="h-11.5 active:scale-95">
+        <Button type="button" variant="outline" disabled={loading || profileRunning || !canGenerateProfiles} onClick={onGenerateProfiles} className="active:scale-95">
           生成项目简介
         </Button>
-        <Button type="button" disabled={loading || profileRunning} onClick={onRegenerateProfiles} className="h-11.5 bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
+        <Button type="button" disabled={loading || profileRunning} onClick={onRegenerateProfiles} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
           重新生成项目简介
         </Button>
       </div>

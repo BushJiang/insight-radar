@@ -1,6 +1,8 @@
 'use client'
 
 import type { ProjectMaturity } from '@/types/insight-radar'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export const maturityOptions: ProjectMaturity[] = ['early', 'growth', 'mature', 'stalled']
 
@@ -21,24 +23,32 @@ interface SelectFilterProps {
   onFocus?: () => void
 }
 
+const EMPTY_MARKER = '__empty__'
+
+// Radix Select 不允许 SelectItem 的 value 为空字符串，用占位值代替
+function safeValue(v: string) {
+  return v || EMPTY_MARKER
+}
+
 export function SelectFilter({ label, value, options, allLabel, optionLabels, onChange, onFocus }: SelectFilterProps) {
-  const id = `filter-${label.replace(/\s+/g, '-').toLowerCase()}`
+  function handleChange(v: string) {
+    onChange(v === EMPTY_MARKER ? '' : v)
+  }
 
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-black dark:text-black">{label}</label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onFocus={onFocus}
-        className="mt-2 h-[46px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition dark:border-slate-700 dark:bg-white dark:text-black"
-      >
-        {allLabel ? <option value="">{allLabel}</option> : null}
-        {options.map((option) => (
-          <option key={option} value={option}>{optionLabels?.[option] ?? option}</option>
-        ))}
-      </select>
+      <Label className="text-black dark:text-black">{label}</Label>
+      <Select value={safeValue(value)} onValueChange={handleChange}>
+        <SelectTrigger className="mt-2 w-full" onFocus={onFocus}>
+          <SelectValue placeholder={allLabel ?? '请选择'} />
+        </SelectTrigger>
+        <SelectContent>
+          {allLabel ? <SelectItem value={EMPTY_MARKER}>{allLabel}</SelectItem> : null}
+          {options.map((option) => (
+            <SelectItem key={option} value={safeValue(option)}>{optionLabels?.[option] ?? option}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

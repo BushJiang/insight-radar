@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getProjectByRepositoryId } from '@/lib/projects-repository'
+import { Button } from '@/components/ui/button'
 import type { ProjectMaturity } from '@/types/insight-radar'
 
 export const revalidate = 3600
@@ -33,9 +34,9 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
               <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{project.fullName}</h2>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700 dark:text-slate-200">{project.description}</p>
             </div>
-            <a href={project.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex h-[42px] cursor-pointer items-center justify-center rounded-xl bg-brand-primary px-4 text-sm font-medium text-white transition hover:bg-brand-primary-hover dark:bg-emerald-700 dark:hover:bg-emerald-600">
-              打开 GitHub
-            </a>
+            <Button asChild className="bg-brand-primary hover:bg-brand-primary-hover dark:bg-emerald-700 dark:hover:bg-emerald-600">
+              <a href={project.sourceUrl} target="_blank" rel="noreferrer">打开 GitHub</a>
+            </Button>
           </div>
         </section>
 
