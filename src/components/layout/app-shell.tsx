@@ -1,9 +1,14 @@
 'use client'
 
+// 🔰 客户端路由组件，点击不刷新页面，只替换内容区
 import Link from 'next/link'
+// 🔰 获取当前 URL 路径，用于高亮导航项
 import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
+import { Container } from '@/components/shared/container'
+import { ThemeToggle } from '@/components/shared/theme-toggle'
 
+// 🔰 导航项在桌面侧边栏和手机底部导航两处复用，只定义一次
 const navigationItems = [
   { href: '/', label: '首页' },
   { href: '/projects', label: '创建项目库' },
@@ -12,7 +17,9 @@ const navigationItems = [
   { href: '/settings', label: '用户设置' },
 ]
 
+// 🔰 外壳组件：侧边栏 + header + 内容区 + 手机导航。children 由 layout.tsx 传入
 export function AppShell({ children }: { children: ReactNode }) {
+  // 🔰 当前路由路径，用于高亮导航项
   const currentPath = usePathname()
 
   return (
@@ -40,8 +47,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="lg:pl-64">
         <header className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-6">
+          <div className="flex items-center justify-end">
+            <ThemeToggle />
+          </div>
         </header>
-        <div className="mx-auto max-w-5xl px-4 pb-24 pt-6 sm:px-6 lg:pb-10">{children}</div>
+        <Container className="pb-24 pt-6 lg:pb-10">{children}</Container>
       </div>
 
       <nav className="fixed bottom-0 left-0 right-0 z-20 grid grid-cols-4 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:hidden" aria-label="移动端主导航">

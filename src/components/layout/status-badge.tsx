@@ -31,6 +31,7 @@ interface StatusBadgeProps {
   label?: string
 }
 
+// 🔰 状态标签徽章，根据 variant 自动变色（success=绿、failed=红、pending=黄）
 export function StatusBadge({ variant, label }: StatusBadgeProps) {
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${statusClassNames[variant]}`}>

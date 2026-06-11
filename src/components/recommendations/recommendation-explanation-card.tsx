@@ -10,6 +10,7 @@ interface RecommendationExplanationCardProps {
   projects: GithubProject[]
 }
 
+// 🔰 推荐结果卡片，内嵌 ProjectCard 并附带 AI 生成的推荐理由，内部管理翻页状态
 export function RecommendationExplanationCard({ recommendation, projects }: RecommendationExplanationCardProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const projectMap = new Map(projects.map((project) => [project.repositoryId, project] as const))
@@ -33,7 +34,7 @@ export function RecommendationExplanationCard({ recommendation, projects }: Reco
               {reason ? (
                 <div className="flex h-70 flex-col overflow-y-auto rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/40">
                   <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">推荐理由：</p>
-                  <p className="mt-1 text-sm leading-6 text-emerald-800 dark:text-emerald-200">
+                  <p className="mt-1 text-sm leading-6 text-emerald-800 whitespace-pre-wrap dark:text-emerald-200">
                     {reason}
                   </p>
                 </div>

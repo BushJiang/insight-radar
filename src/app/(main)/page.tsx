@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { StatusBadge } from '@/components/app/status-badge'
+import { StatusBadge } from '@/components/layout/status-badge'
+import { Container } from '@/components/shared/container'
 import { ProjectCard } from '@/components/projects/project-card'
 import { getHomeMetrics, getLatestProjects } from '@/lib/projects-repository'
 
@@ -7,7 +8,9 @@ export const revalidate = 3600
 
 export default async function Home() {
   const [metrics, latestProjects] = await Promise.all([
+    // 🔰 查询首页统计：项目总数 + 来源账号列表
     getHomeMetrics(),
+    // 🔰 按采集时间倒序取最新 N 个项目
     getLatestProjects(4),
   ])
   const visibleSourceUsernames = metrics.sourceUsernames.slice(0, 4)
@@ -16,10 +19,10 @@ export default async function Home() {
   return (
     <main className="space-y-8">
       <section className="rounded-3xl bg-green-600 px-6 py-10 text-white shadow-sm sm:px-8 sm:py-10">
-        <div className="mx-auto max-w-3xl space-y-4 text-center">
+        <Container size="sm" className="space-y-4 text-center">
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">智源雷达 InsightRadar</h1>
           <p className="text-base text-emerald-50 sm:text-lg">找到 GitHub 上最有价值的开源项目</p>
-        </div>
+        </Container>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-8">

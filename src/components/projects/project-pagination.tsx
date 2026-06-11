@@ -9,6 +9,7 @@ interface ProjectPaginationProps {
 
 type PaginationItem = number | 'ellipsis'
 
+// 🔰 分页组件，支持省略号智能折叠（如 1 ... 4 5 6 ... 20）
 export function ProjectPagination({ currentPage, totalPages, totalItems, onPageChange }: ProjectPaginationProps) {
   const items = buildPaginationItems(currentPage, totalPages)
 

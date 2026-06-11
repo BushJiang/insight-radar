@@ -4,6 +4,10 @@
 // default-preference.ts 中的 defaultProjectProfileAgentPrompt 仅作为新用户首次访问时的兜底默认值。
 import { Agent } from '@mastra/core/agent'
 
+// 模型选 deepseek-v4-flash 而非 v4-pro 的原因：
+//   v4-pro 是推理模型，内部思考过程也消耗 output token。
+//   maxOutputTokens=320 的情况下，推理消耗光全部预算 → result.text 为空。
+//   关掉推理或提到 4096 也可行，但 flash 响应更快且成本更低，适合批量生成场景。
 export const projectProfileAgent = new Agent({
   id: 'project-profile-agent',
   name: '项目简介生成智能体',

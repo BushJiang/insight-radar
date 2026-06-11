@@ -11,6 +11,7 @@ interface ProjectVectorSearchOptions {
 const collectionName = process.env.MILVUS_PROJECT_COLLECTION || 'insight_radar_project_profiles'
 const vectorDimension = Number(process.env.PROJECT_PROFILE_VECTOR_DIMENSION || 64)
 
+// 🔰 将项目简介向量化后写入 Milvus，用于语义搜索
 export async function upsertProjectProfileVectors(projects: GithubProject[]) {
   const projectsWithProfiles = projects.filter((project) => project.readmeSummary)
 
@@ -42,6 +43,7 @@ export async function upsertProjectProfileVectors(projects: GithubProject[]) {
   }
 }
 
+// 🔰 在 Milvus 中搜索语义相似的项目简介，结合结构化过滤和 COSINE 相似度排序
 export async function searchProjectProfileVectors({ query, filters, limit }: ProjectVectorSearchOptions) {
   if (!process.env.MILVUS_ADDRESS) {
     return []

@@ -85,6 +85,7 @@ interface SearchGithubStarredProjectsOptions {
   maxProjects?: number
 }
 
+// 🔰 通过 GitHub GraphQL API 获取指定账号 Star 的项目列表，提取 README 并推断成熟度
 export async function searchGithubStarredProjects({ filters, githubToken, maxProjects }: SearchGithubStarredProjectsOptions): Promise<GithubStarredSearchResponse> {
   const username = filters.sourceGithubUsername?.trim()
 
@@ -94,6 +95,7 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
 
   const { edges, totalCount } = await fetchStarredReposViaGraphql(username, filters.days, maxProjects ?? defaultMaxFetchedRepositories, githubToken?.trim())
   const collectedProjects = await Promise.all(edges.map((edge) => mapRepoEdgeToProject(edge, username, githubToken?.trim())))
+// 🔰 将采集到的项目写入 PostgreSQL，已存在的更新元数据
   const persistedResult = await persistCollectedProjects(collectedProjects)
   const projects = filters.query.trim()
     ? (await searchProjectsFromDatabase({
@@ -252,6 +254,7 @@ async function buildGithubError(response: Response) {
   return new GithubApiError(`GitHub API 请求失败，状态码：${response.status}。`, response.status)
 }
 
+// 🔰 根据 Stars 数和最近推送时间推断项目成熟度（early/growth/mature/stalled）
 function inferMaturity(stars: number, pushedAt: string): ProjectMaturity {
   const inactiveDays = (Date.now() - new Date(pushedAt).getTime()) / 86_400_000
 

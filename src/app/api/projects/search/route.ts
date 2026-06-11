@@ -1,10 +1,14 @@
+import { ZodError } from 'zod'
 import { resolveErrorMessage } from '@/lib/api-response'
+import { handleZodError } from '@/lib/api-validation'
 import { listCollectedSourceGithubUsernames, searchProjectsFromDatabase } from '@/lib/projects-repository'
-import type { SearchProjectsRequest, SearchProjectsResponse } from '@/types/insight-radar'
+import { searchProjectsSchema } from '@/validations/api-schemas'
+import type { SearchProjectsResponse } from '@/types/insight-radar'
 
+// 🔰 POST /api/projects/search — 搜索高价值项目库，支持关键词、语言、成熟度等筛选
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as SearchProjectsRequest
+    const body = searchProjectsSchema.parse(await req.json())
     const [{ projects, totalCount }, sources] = await Promise.all([
       searchProjectsFromDatabase({
         query: body.filters.query,
@@ -15,6 +19,7 @@ export async function POST(req: Request) {
         page: body.page,
         pageSize: body.pageSize,
       }),
+// 🔰 查询所有已采集的来源 GitHub 账号，供前端筛选下拉框使用
       listCollectedSourceGithubUsernames(),
     ])
 
@@ -27,6 +32,8 @@ export async function POST(req: Request) {
 
     return Response.json(response)
   } catch (error) {
+    if (error instanceof ZodError) return handleZodError(error)
+
     const response: SearchProjectsResponse = {
       projects: [],
       totalCount: 0,

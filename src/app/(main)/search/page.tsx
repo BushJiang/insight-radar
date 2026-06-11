@@ -32,10 +32,12 @@ export default function SearchPage() {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / projectPageSize))
 
+// 🔰 更新搜索表单的草稿筛选条件，不触发搜索
   function updateDraftFilters(nextFilters: Partial<ProjectSearchFilters>) {
     setDraftFilters((prev) => ({ ...prev, ...nextFilters }))
   }
 
+// 🔰 调用 /api/projects/search 发送搜索请求，返回项目列表和总数
   async function fetchProjects(filters: ProjectSearchFilters, page: number) {
     const response = await fetch('/api/projects/search', {
       method: 'POST',
@@ -47,6 +49,7 @@ export default function SearchPage() {
     return { response, result }
   }
 
+// 🔰 首次聚焦来源下拉框时，发送空搜索获取所有来源账号列表
   async function ensureSourcesLoaded() {
     if (sourcesLoaded) return
     try {
@@ -59,6 +62,7 @@ export default function SearchPage() {
     }
   }
 
+// 🔰 点搜索按钮时执行：调 API 搜索 → 更新结果列表、来源列表、总数
   const handleSearch = useCallback(async (page = 1, filterValues = draftFilters) => {
     setLoading(true)
     setError(null)

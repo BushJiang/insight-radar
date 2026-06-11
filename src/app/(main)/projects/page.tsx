@@ -53,6 +53,7 @@ export default function ProjectsPage() {
   const totalPages = Math.max(1, Math.ceil(projects.length / projectPageSize))
   const paginatedProjects = useMemo(() => projects.slice((pageState.currentPage - 1) * projectPageSize, pageState.currentPage * projectPageSize), [projects, pageState.currentPage])
 
+  // 🔰 更新页面状态（页码、进度、快照），合并到现有状态
   const updatePageState = useCallback((nextState: Partial<ProjectsPageState>) => {
     setPageState((currentState) => ({ ...currentState, ...nextState }))
   }, [setPageState])
@@ -174,6 +175,7 @@ export default function ProjectsPage() {
   )
 }
 
+// 🔰 采集进度卡片，根据 progress.status 显示「正在采集」「采集完成」或「采集失败」
 function CollectionProgressCard({ progress }: { progress: CollectionProgress | null }) {
   if (!progress || progress.status === 'pending') {
     return null

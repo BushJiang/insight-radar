@@ -12,6 +12,7 @@ const maturityLabels: Record<ProjectMaturity, string> = {
   stalled: '停滞',
 }
 
+// 🔰 项目卡片组件，展示项目摘要信息（名称、描述、Stars、标签等），点击跳转详情页
 export function ProjectCard({ project }: ProjectCardProps) {
   const watchedAccounts = formatWatchedAccounts([project.sourceGithubUsername])
   const visibleTopics = project.topics.slice(0, 5)

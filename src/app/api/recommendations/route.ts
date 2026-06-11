@@ -1,20 +1,10 @@
+import { ZodError } from 'zod'
 import { resolveErrorMessage } from '@/lib/api-response'
+import { handleZodError } from '@/lib/api-validation'
 import { normalizePreference } from '@/lib/default-preference'
 import { generateProjectRecommendations } from '@/lib/recommendation-service'
-import type { ProjectProfileProgress, RecommendationExplanation, UserPreference, GithubProject } from '@/types/insight-radar'
-
-interface RecommendationRequestBody {
-  query: string
-  filters: {
-    query?: string
-    languages?: string[]
-    maturity?: Array<'early' | 'growth' | 'mature' | 'stalled'>
-    sourceGithubUsername?: string | null
-    days?: number | null
-  }
-  recommendationLimit: number
-  preference?: Partial<UserPreference>
-}
+import { recommendationRequestSchema } from '@/validations/api-schemas'
+import type { ProjectProfileProgress, RecommendationExplanation, GithubProject } from '@/types/insight-radar'
 
 interface RecommendationResponseBody {
   progress: ProjectProfileProgress
@@ -25,9 +15,8 @@ interface RecommendationResponseBody {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as RecommendationRequestBody
+    const body = recommendationRequestSchema.parse(await req.json())
     const preference = normalizePreference(body.preference)
-    const recommendationLimit = Math.max(1, Math.min(50, Number(body.recommendationLimit) || 4))
     const result = await generateProjectRecommendations({
       query: body.query.trim(),
       filters: {
@@ -37,7 +26,7 @@ export async function POST(req: Request) {
         sourceGithubUsername: body.filters.sourceGithubUsername ?? null,
         days: body.filters.days ?? null,
       },
-      recommendationLimit,
+      recommendationLimit: body.recommendationLimit,
       preference,
     })
     const response: RecommendationResponseBody = {
@@ -47,6 +36,8 @@ export async function POST(req: Request) {
 
     return Response.json(response)
   } catch (error) {
+    if (error instanceof ZodError) return handleZodError(error)
+
     const response: RecommendationResponseBody = {
       progress: {
         status: 'failed',

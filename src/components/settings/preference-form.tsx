@@ -18,6 +18,7 @@ interface PreferenceFormState {
 const unlimitedDomain = '不限领域'
 const domains = [unlimitedDomain, '智能体', '前端', '后端', '数据库', 'AI 工具', '开发工具', '基础设施']
 
+// 🔰 用户设置表单，编辑领域偏好、推荐提示词、项目简介提示词，数据存 localStorage
 export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
   const [savedState, setSavedState] = useState<PreferenceFormState>(() => {
     const saved = readBrowserStorage(preferenceStorageKey, null)
@@ -133,7 +134,7 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
           className="min-h-36 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
           placeholder="请输入项目推荐提示词"
         />
-        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{domainPreferences}'}（领域偏好）、{'{projectRequirement}'}（项目需求）、{'{finalRecommendationCount}'}（最终推荐数量）、{'{candidateProjectCount}'}（候选项目数量）、{'{candidateProjects}'}（候选项目）。</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{domainPreferences}}'}（领域偏好）、{'{{query}}'}（用户需求）、{'{{projectFullName}}'}（仓库全名）、{'{{readmeSummary}}'}（项目简介）、{'{{projectLanguage}}'}（主要语言）、{'{{maturity}}'}（项目成熟度）、{'{{stars}}'}（Stars 数量）、{'{{sourceGithubUsername}}'}（来源账号）。</p>
       </PreferenceCard>
 
       <PreferenceCard title="项目简介提示词">
@@ -143,7 +144,7 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
           className="min-h-36 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
           placeholder="请输入项目简介提示词"
         />
-        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{projectName}'}（项目名称）、{'{repositoryFullName}'}（仓库全名）、{'{projectDescription}'}（项目描述）、{'{primaryLanguage}'}（主要语言）、{'{readme}'}（README 内容）。</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{projectName}}'}（项目名称）、{'{{repositoryFullName}}'}（仓库全名）、{'{{projectDescription}}'}（项目描述）、{'{{primaryLanguage}}'}（主要语言）、{'{{readme}}'}（README 内容）。</p>
       </PreferenceCard>
 
       <PreferenceCard title="候选项目数量">

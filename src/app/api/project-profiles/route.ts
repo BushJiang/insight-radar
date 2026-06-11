@@ -24,6 +24,7 @@ interface ProjectProfilesResponseBody {
   error: string | null
 }
 
+// 🔰 POST /api/project-profiles — 项目简介生成（action='status'查询/'generate'生成/'regenerate'重新生成）
 export async function POST(req: Request) {
   try {
     const body = await req.json() as ProjectProfilesRequestBody
@@ -34,9 +35,11 @@ export async function POST(req: Request) {
       sourceGithubUsername: body.filters.sourceGithubUsername ?? null,
       days: body.filters.days ?? null,
     }
+// 🔰 合并用户偏好，缺失字段用默认值补齐
     const preference = normalizePreference(body.preference)
     const processedRepositoryIds = body.processedRepositoryIds ?? []
     const profileResult = body.action === 'status'
+// 🔰 根据 action 分发：status 查询进度，generate 生成简介，regenerate 重新生成
       ? { ...(await getProjectProfileStatus(filters)), processedRepositoryIds }
       : body.action === 'regenerate'
         ? await regenerateProjectProfiles(filters, preference, processedRepositoryIds)

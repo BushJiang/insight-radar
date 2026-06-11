@@ -1,14 +1,10 @@
 'use client'
 
 import type { ProjectMaturity, ProjectSearchFilters } from '@/types/insight-radar'
-
-const maturityOptions: ProjectMaturity[] = ['early', 'growth', 'mature', 'stalled']
-const maturityLabels: Record<ProjectMaturity, string> = {
-  early: '早期',
-  growth: '成长',
-  mature: '成熟',
-  stalled: '停滞',
-}
+import { maturityLabels, maturityOptions, SelectFilter } from '@/components/shared/select-filter'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 interface ProjectSearchBarProps {
   filters: ProjectSearchFilters
@@ -24,20 +20,20 @@ export function ProjectSearchBar({ filters, sources, loading = false, onSearch, 
     <div className="space-y-4">
       <div className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_120px]">
         <div>
-          <label htmlFor="query" className="block text-sm font-medium text-black dark:text-black">项目搜索</label>
-          <input
+          <Label htmlFor="query">项目搜索</Label>
+          <Input
             id="query"
             type="search"
             value={filters.query}
             onChange={(event) => onChange({ query: event.target.value })}
             onKeyDown={(event) => { if (event.key === 'Enter') onSearch() }}
-            className="mt-2 h-[46px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition placeholder:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black"
+            className="mt-2 h-[46px]"
             placeholder="输入关键词，搜索项目名称、描述、README"
           />
         </div>
-        <button type="button" disabled={loading} onClick={onSearch} className="mt-7 inline-flex h-[46px] cursor-pointer items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400">
+        <Button type="button" disabled={loading} onClick={onSearch} className="mt-7 h-[46px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-400">
           搜索
-        </button>
+        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -50,34 +46,3 @@ export function ProjectSearchBar({ filters, sources, loading = false, onSearch, 
   )
 }
 
-interface SelectFilterProps {
-  label: string
-  value: string
-  options: string[]
-  allLabel?: string
-  optionLabels?: Record<string, string>
-  onChange: (value: string) => void
-  onFocus?: () => void
-}
-
-function SelectFilter({ label, value, options, allLabel, optionLabels, onChange, onFocus }: SelectFilterProps) {
-  const id = `filter-${label}`
-
-  return (
-    <div>
-      <label htmlFor={id} className="block text-sm font-medium text-black dark:text-black">{label}</label>
-      <select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onFocus={onFocus}
-        className="mt-2 h-[46px] w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-black shadow-sm outline-none transition dark:border-slate-700 dark:bg-white dark:text-black"
-      >
-        {allLabel ? <option value="">{allLabel}</option> : null}
-        {options.map((option) => (
-          <option key={option} value={option}>{optionLabels?.[option] ?? option}</option>
-        ))}
-      </select>
-    </div>
-  )
-}

@@ -4,6 +4,7 @@ import { buildProfileHash, getProjectProfileStatus } from '@/lib/project-profile
 import { searchProjectProfileVectors, upsertProjectProfileVectors } from '@/lib/project-vector-store'
 import type { GithubProject, ProjectSearchFilters, RecommendationExplanation, UserPreference } from '@/types/insight-radar'
 
+// 🔰 AI 生成的推荐理由最长 280 字符
 const recommendationReasonMaxLength = 280
 
 interface GenerateRecommendationsOptions {
@@ -13,6 +14,7 @@ interface GenerateRecommendationsOptions {
   preference: UserPreference
 }
 
+// 🔰 生成推荐的主入口。先确保有简介 → 向量搜索候选项目 → AI 生成推荐理由
 export async function generateProjectRecommendations({ query, filters, recommendationLimit, preference }: GenerateRecommendationsOptions) {
   const progress = await getProjectProfileStatus(filters)
 
@@ -49,9 +51,12 @@ export async function generateProjectRecommendations({ query, filters, recommend
   }
 }
 
+// 🔰 从数据库 + 向量搜索获取候选项目，向量搜索无结果时回退到数据库列表
 async function getCandidateProjects(query: string, filters: ProjectSearchFilters, limit: number) {
   const fallbackProjects = await listProjectsForRecommendation({ ...filters, limit })
+// 🔰 将项目简介向量化后写入 Milvus，用于语义搜索
   await upsertProjectProfileVectors(fallbackProjects)
+// 🔰 在 Milvus 中搜索语义相似的项目，结合 COSINE 相似度排序
   const vectorResults = await searchProjectProfileVectors({ query, filters, limit })
 
   if (vectorResults.length === 0) {
@@ -67,6 +72,7 @@ async function getCandidateProjects(query: string, filters: ProjectSearchFilters
   return projects.length > 0 ? projects : fallbackProjects
 }
 
+// 🔰 对每个候选项目调用 Mastra Agent 并发生成推荐理由
 async function generateRecommendationReasons({ query, preference, recommendationLimit, candidateProjects }: { query: string; preference: UserPreference; recommendationLimit: number; candidateProjects: GithubProject[] }) {
   if (candidateProjects.length === 0) {
     return {}
@@ -92,6 +98,7 @@ async function generateRecommendationReasons({ query, preference, recommendation
   }
 }
 
+// 🔰 AI 返回空或失败时，用项目信息拼接兜底理由
 function normalizeRecommendationReason(text: string | undefined, project: GithubProject, query: string) {
   const reason = text?.trim()
 
@@ -105,6 +112,7 @@ function buildFallbackRecommendationReason(project: GithubProject, query: string
   return sanitizeRecommendationReason(`${project.fullName} 适合“${demandText}”。${profile}`)
 }
 
+// 🔰 清理 AI 输出中的 Markdown 格式（标题、粗体、代码块、列表标记）
 function sanitizeRecommendationReason(reason: string) {
   return reason
     .replace(/#{1,6}\s*/g, '')
@@ -117,17 +125,24 @@ function sanitizeRecommendationReason(reason: string) {
 
 function buildRecommendationReasonPrompt({ query, preference, recommendationLimit, project }: { query: string; preference: UserPreference; recommendationLimit: number; project: GithubProject }) {
   const domainsText = preference.domains.length > 0 ? preference.domains.join('、') : '无固定领域偏好'
+  const variables: Record<string, string> = {
+    domainPreferences: domainsText,
+    query: query || '用户未填写具体需求，请基于领域偏好推荐。',
+    projectFullName: project.fullName,
+    readmeSummary: project.readmeSummary ?? '暂无项目简介',
+    projectLanguage: project.language,
+    maturity: project.maturity,
+    stars: String(project.stars),
+    sourceGithubUsername: project.sourceGithubUsername,
+  }
+  let userPrompt = preference.recommendationAgentPrompt
+  for (const [key, value] of Object.entries(variables)) {
+    userPrompt = userPrompt.replaceAll(`{{${key}}}`, value)
+  }
 
-  return `${preference.recommendationAgentPrompt}
+  return `${userPrompt}
 
-变量：
-- 领域偏好：${domainsText}
-- 项目需求：${query || '用户未填写具体需求，请基于领域偏好推荐。'}
-- 最终推荐数量：${recommendationLimit}
-- 候选项目数量：1
-
-项目：
-repositoryId：${project.repositoryId}
+项目数据：
 仓库：${project.fullName}
 描述：${project.description}
 项目简介：${project.readmeSummary ?? '暂无项目简介'}
@@ -136,8 +151,9 @@ repositoryId：${project.repositoryId}
 Stars：${project.stars}
 来源账号：${project.sourceGithubUsername}
 链接：${project.sourceUrl}
+推荐数量：${recommendationLimit} 个项目中选 1 个
 
-请只输出这个项目的推荐理由，不要返回 JSON，不要使用 Markdown，不要输出 ##、**、列表符号或代码块。输出内容不超过 200 字，格式如下所示：
+请只输出这个项目的推荐理由，不要返回 JSON，不要使用 Markdown，不要输出 ##、**、列表符号或代码块。每个字段之间必须用换行分隔。输出内容不超过 200 字，严格按照以下格式输出：
 推荐理由：
 适用场景：
 上手建议：

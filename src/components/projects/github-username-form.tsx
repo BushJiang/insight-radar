@@ -2,6 +2,10 @@
 
 import { useState } from 'react'
 import { validateGithubUsername } from '@/lib/github-validation'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { CollectionProgress, GithubProject, GithubStarredSearchResponse } from '@/types/insight-radar'
 
 interface GithubUsernameFormProps {
@@ -19,13 +23,14 @@ interface GithubUsernameFormProps {
   inline?: boolean
 }
 
+// 🔰 GitHub 用户名采集表单。提交后调用 /api/github/starred-search 采集该账号 Star 的项目
 export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithubUsernameChange, onDaysChange, onMaxProjectsChange, onCreated, onProjectsCollected, onProgressChange, compact = false, multiple = false, inline = false }: GithubUsernameFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [isCollecting, setIsCollecting] = useState(false)
   const usernames = githubUsername.split(/[\n,，、]+/).map((username) => username.trim()).filter(Boolean)
   const maxProjectsValue = Number(maxProjects)
   const formClassName = compact || inline ? 'grid gap-3 md:grid-cols-[minmax(260px,1fr)_160px_160px_auto] md:items-start' : 'space-y-4'
-  const usernameFieldClassName = inline ? 'h-[46px] w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-[20px] text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200' : 'mt-2 min-h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200'
+  const usernameFieldClassName = inline ? 'w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-[20px] text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200' : 'mt-2 min-h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200'
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -162,7 +167,7 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
         <p id="githubUsername-error" className={`h-5 truncate whitespace-nowrap text-sm leading-5 ${error ? 'text-red-600 dark:text-red-300' : 'text-slate-500 dark:text-slate-400'}`}>{error || '请输入 GitHub 用户名'}</p>
         <div className="h-5" />
         {multiple ? (
-          <input
+          <Input
             id="githubUsername"
             name="githubUsername"
             value={githubUsername}
@@ -173,14 +178,13 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
             placeholder="GitHub 用户名"
           />
         ) : (
-          <input
+          <Input
             id="githubUsername"
             name="githubUsername"
             value={githubUsername}
             onChange={(event) => onGithubUsernameChange(event.target.value)}
             disabled={isCollecting}
             aria-describedby="githubUsername-error"
-            className="h-[46px] w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-[20px] text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200"
             placeholder="GitHub 用户名"
           />
         )}
@@ -189,30 +193,28 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
 
       <div className="space-y-2">
         <div className="h-5" />
-        <label htmlFor="days" className="block text-sm font-medium text-white dark:text-black">
+        <Label className="flex h-5 items-center text-white dark:text-black">
           时间范围
-        </label>
-        <select
-          id="days"
-          name="days"
-          value={days}
-          onChange={(event) => onDaysChange(event.target.value)}
-          disabled={isCollecting}
-          className="h-[46px] w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-[20px] text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200"
-        >
-          <option value="7">最近 7 天</option>
-          <option value="30">最近 30 天</option>
-          <option value="90">最近 90 天</option>
-          <option value="all">不限时间</option>
-        </select>
+        </Label>
+        <Select value={days} onValueChange={onDaysChange} disabled={isCollecting}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="选择时间范围" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7">最近 7 天</SelectItem>
+            <SelectItem value="30">最近 30 天</SelectItem>
+            <SelectItem value="90">最近 90 天</SelectItem>
+            <SelectItem value="all">不限时间</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">
         <div className="h-5" />
-        <label htmlFor="maxProjects" className="block text-sm font-medium text-white dark:text-black">
+        <Label htmlFor="maxProjects" className="flex h-5 items-center">
           最多项目数量
-        </label>
-        <input
+        </Label>
+        <Input
           id="maxProjects"
           name="maxProjects"
           type="number"
@@ -221,7 +223,6 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
           value={maxProjects}
           onChange={(event) => onMaxProjectsChange(event.target.value)}
           disabled={isCollecting}
-          className="h-11.5 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-5 text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200"
           placeholder="0 表示全部"
         />
       </div>
@@ -229,13 +230,13 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
       <div className="space-y-2">
         <div className="h-5" />
         <div className="h-5" />
-        <button
+        <Button
           type="submit"
           disabled={isCollecting}
-          className="inline-flex h-11.5 min-w-24 cursor-pointer items-center justify-center rounded-xl bg-emerald-600 px-5 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:hover:bg-slate-400"
+          className="min-w-24 bg-emerald-600 hover:bg-emerald-700 active:scale-95"
         >
           {isCollecting ? '采集中' : '开始采集'}
-        </button>
+        </Button>
       </div>
     </form>
   )

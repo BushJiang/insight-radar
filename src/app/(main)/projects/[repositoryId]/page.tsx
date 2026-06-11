@@ -17,6 +17,7 @@ const maturityLabels: Record<ProjectMaturity, string> = {
 
 export default async function ProjectDetailPage({ params }: ProjectDetailPageProps) {
   const { repositoryId } = await params
+// 🔰 根据 repositoryId 查询单个项目详情
   const project = await getProjectByRepositoryId(decodeURIComponent(repositoryId))
 
   if (!project) {
@@ -84,6 +85,7 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
   )
 }
 
+// 🔰 带标题的分组卡片，用于详情页分区展示（基础信息、时间信息等）
 function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -93,6 +95,7 @@ function DetailCard({ title, children }: { title: string; children: React.ReactN
   )
 }
 
+// 🔰 标签-值网格行，左侧标签 + 右侧内容，用于详情页属性展示
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="grid gap-1 text-sm sm:grid-cols-[96px_1fr]">
@@ -102,6 +105,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   )
 }
 
+// 🔰 取日期字符串前 10 位（YYYY-MM-DD），丢弃时间部分
 function formatDate(value: string) {
   return value.slice(0, 10)
 }

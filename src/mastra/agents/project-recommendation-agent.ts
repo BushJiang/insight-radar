@@ -3,7 +3,6 @@
 // agent.generate(userPrompt) 传入，与 instructions 叠加后一起发给模型。前后两层都生效。
 // default-preference.ts 中的 defaultRecommendationAgentPrompt 仅作为新用户首次访问时的兜底默认值。
 import { Agent } from '@mastra/core/agent'
-import { projectLibraryTool } from '../tools/project-library-tool'
 
 export const projectRecommendationAgent = new Agent({
   id: 'project-recommendation-agent',
@@ -17,5 +16,4 @@ export const projectRecommendationAgent = new Agent({
 - 不要使用 Markdown 格式，不要输出 ##、**、列表符号或代码块。
 `,
   model: 'deepseek/deepseek-v4-flash',
-  tools: { projectLibraryTool },
 })

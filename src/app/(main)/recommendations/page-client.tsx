@@ -14,6 +14,7 @@ interface RecommendationsPageClientProps {
   initialProjects: GithubProject[]
 }
 
+// 🔰 项目简介生成进度的初始值（未开始状态）
 const initialProgress: ProjectProfileProgress = {
   status: 'ready',
   completedCount: 0,
@@ -22,20 +23,26 @@ const initialProgress: ProjectProfileProgress = {
 }
 
 export default function RecommendationsPageClient({ initialProjects }: RecommendationsPageClientProps) {
+  // 🔰 从 sessionStorage 恢复上次离开页面时的表单状态，避免刷新后丢失
   const recommendationDraft = readTransientFormState().recommendations
+  // 🔰 用户输入的表单状态（推荐数量、筛选条件、需求描述、推荐结果）
   const [recommendationLimit, setRecommendationLimit] = useState(recommendationDraft.recommendationLimit)
   const [filters, setFilters] = useState(recommendationDraft.filters)
   const [query, setQuery] = useState(recommendationDraft.query)
   const [recommendations, setRecommendations] = useState<RecommendationExplanation[]>(recommendationDraft.recommendations)
   const [projects, setProjects] = useState(recommendationDraft.projects.length > 0 ? recommendationDraft.projects : initialProjects)
+  // 🔰 来源账号列表，用于筛选下拉框的选项
   const [sources, setSources] = useState<string[]>([])
   const [sourcesLoaded, setSourcesLoaded] = useState(false)
+  // 🔰 项目简介生成进度（总数、已完成数、状态）
   const [progress, setProgress] = useState<ProjectProfileProgress>(initialProgress)
   const [loading, setLoading] = useState(false)
   const [recommending, setRecommending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 🔰 还有项目没生成简介时，显示「生成项目简介」按钮
   const canGenerateProfiles = progress.totalCount > progress.completedCount
 
+  // 🔰 进入页面或筛选条件变化时，自动查询项目简介生成进度
   useEffect(() => {
     let cancelled = false
 
@@ -60,6 +67,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     }
   }, [filters])
 
+  // 🔰 首次点击来源下拉框时，发送空搜索获取所有来源账号列表
   async function ensureSourcesLoaded() {
     if (sourcesLoaded) {
       return
@@ -90,6 +98,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     }
   }
 
+  // 🔰 点「智能推荐」按钮：调 API 获取 AI 推荐结果
   const handleRecommend = useCallback(async () => {
     setLoading(true)
     setRecommending(true)
@@ -136,6 +145,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     }
   }, [filters, query, recommendationLimit])
 
+  // 🔰 点「生成项目简介」按钮：轮询调用 API，每 500ms 检查一次进度，直到全部完成
   const handleGenerateProfiles = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -157,7 +167,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
         if (result.progress.status !== 'running') {
           return
         }
-        // 轮询间延迟，避免空转浪费资源
+        // 🔰 轮询间延迟 500ms，避免空转浪费服务器资源
         await new Promise((resolve) => setTimeout(resolve, 500))
       }
     } catch {
@@ -167,10 +177,11 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     }
   }, [filters])
 
+  // 🔰 点「重新生成项目简介」按钮：和生成类似，但会重新生成已有简介的项目
   const handleRegenerateProfiles = useCallback(async () => {
     setLoading(true)
     setError(null)
-    // 立即显示进度条，避免 AI 生成期间（10-30s）UI 无反馈
+    // 🔰 立即显示进度条，避免 AI 生成期间（10-30s）UI 无反馈
     setProgress({ status: 'running', completedCount: 0, totalCount: 1, message: '正在准备重新生成项目简介' })
 
     try {
@@ -188,7 +199,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
 
         if (result.progress.status === 'ready') {
           setProgress(result.progress)
-          // API 在再生完成时直接返回最新项目数据，无需额外请求
+          // 🔰 API 在再生完成时直接返回最新项目数据，无需额外请求
           if (result.projects.length > 0) {
             setProjects(result.projects)
             writeTransientRecommendationFormState({ projects: result.projects })
@@ -259,6 +270,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   )
 }
 
+// 🔰 调用 /api/project-profiles 接口。action='status' 查询进度，'generate' 生成简介，'regenerate' 重新生成
 async function requestProjectProfiles(action: 'status' | 'generate' | 'regenerate', filters: ProjectSearchFilters, processedRepositoryIds: string[]) {
   const response = await fetch('/api/project-profiles', {
     method: 'POST',
@@ -279,6 +291,7 @@ async function requestProjectProfiles(action: 'status' | 'generate' | 'regenerat
   return result
 }
 
+// 🔰 合并轮询中两次返回的进度数据。AI 生成是分批的，每次只返回新完成的，需要累加到上一次进度上
 function resolveStableProgress(currentProgress: ProjectProfileProgress, nextProgress: ProjectProfileProgress): ProjectProfileProgress {
   if (nextProgress.status === 'ready') {
     return currentProgress.totalCount > 0
@@ -301,6 +314,7 @@ function resolveStableProgress(currentProgress: ProjectProfileProgress, nextProg
   }
 }
 
+// 🔰 项目简介生成进度条组件。显示完成数/总数 + 百分比进度条。全部完成时自动隐藏
 function ProjectProfileProgressCard({ progress }: { progress: ProjectProfileProgress }) {
   if (progress.status === 'ready' && progress.totalCount === 0) {
     return null

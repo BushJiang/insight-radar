@@ -3,11 +3,13 @@ import { getDb } from '@/lib/db/client'
 import { projects } from '@/lib/db/schema'
 import type { GithubProject, ProjectMaturity } from '@/types/insight-radar'
 
+// 🔰 首页统计指标：项目总数和来源账号列表
 export interface HomeMetrics {
   projectCount: number
   sourceUsernames: string[]
 }
 
+// 🔰 项目持久化结果：区分新增/重复/更新三种情况
 export interface PersistProjectsResult {
   createdProjects: GithubProject[]
   duplicateCount: number
@@ -41,6 +43,7 @@ const collectedFieldNames = [
   'collectionJobId',
 ] as const
 
+// 🔰 将采集到的项目写入数据库。同一 fullName 已存在时更新元数据，新增时插入
 export async function persistCollectedProjects(collectedProjects: GithubProject[]): Promise<PersistProjectsResult> {
   const db = getDb()
   const createdProjects: GithubProject[] = []
@@ -73,6 +76,7 @@ export async function persistCollectedProjects(collectedProjects: GithubProject[
   return { createdProjects, duplicateCount, updatedDuplicateCount, unchangedDuplicateCount }
 }
 
+// 🔰 查询首页统计：项目总数 + 不重复的来源账号列表
 export async function getHomeMetrics(): Promise<HomeMetrics> {
   const db = getDb()
   const [projectCountRow, sourceRows] = await Promise.all([
@@ -108,6 +112,7 @@ export async function getProjectMapByRepositoryIds(repositoryIds: string[]) {
   }))
 }
 
+// 🔰 多条件搜索项目库。支持关键词、语言、成熟度、来源账号、时间范围、分页
 export async function searchProjectsFromDatabase(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; page: number; pageSize: number }) {
   const db = getDb()
   const conditions = buildProjectSearchConditions(filters)
@@ -126,6 +131,7 @@ export async function searchProjectsFromDatabase(filters: { query: string; langu
   }
 }
 
+// 🔰 查询所有已采集的来源 GitHub 账号，供前端筛选下拉框使用
 export async function listCollectedSourceGithubUsernames() {
   const db = getDb()
   const rows = await db.select({ sourceGithubUsername: projects.sourceGithubUsername }).from(projects).where(isNull(projects.deletedAt)).orderBy(asc(projects.sourceGithubUsername))
@@ -133,6 +139,7 @@ export async function listCollectedSourceGithubUsernames() {
   return Array.from(new Set(rows.map((row) => row.sourceGithubUsername)))
 }
 
+// 🔰 根据 repositoryId 查询单个项目详情
 export async function getProjectByRepositoryId(repositoryId: string) {
   const db = getDb()
   const [project] = await db.select().from(projects).where(and(eq(projects.repositoryId, repositoryId), isNull(projects.deletedAt))).limit(1)
@@ -140,6 +147,7 @@ export async function getProjectByRepositoryId(repositoryId: string) {
   return project ? toGithubProject(project) : null
 }
 
+// 🔰 统计 readmeSummary 为空的缺失简介项目数
 export async function countProjectsMissingProfiles(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null }) {
   const db = getDb()
   const where = and(...buildProjectSearchConditions(filters), sql`${projects.readmeSummary} is null or trim(${projects.readmeSummary}) = ''`)
@@ -148,6 +156,7 @@ export async function countProjectsMissingProfiles(filters: { query: string; lan
   return row?.value ?? 0
 }
 
+// 🔰 批量查询缺失简介的项目列表，按采集时间倒序，最多返回 limit 条
 export async function listProjectsMissingProfiles(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; limit: number }) {
   const db = getDb()
   const where = and(...buildProjectSearchConditions(filters), sql`${projects.readmeSummary} is null or trim(${projects.readmeSummary}) = ''`)
@@ -156,11 +165,13 @@ export async function listProjectsMissingProfiles(filters: { query: string; lang
   return rows.map(toGithubProject)
 }
 
+// 🔰 将 AI 生成的项目简介写入数据库
 export async function updateProjectProfile(repositoryId: string, profile: string) {
   const db = getDb()
   await db.update(projects).set({ readmeSummary: profile, updatedAt: new Date() }).where(eq(projects.repositoryId, repositoryId))
 }
 
+// 🔰 推荐用的项目列表查询：筛选条件 + 按 stars 降序排列
 export async function listProjectsForRecommendation(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; limit: number }) {
   const db = getDb()
   const rows = await db.select().from(projects).where(and(...buildProjectSearchConditions(filters))).orderBy(sql`${projects.stars} desc`).limit(Math.max(1, filters.limit))
