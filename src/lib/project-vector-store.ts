@@ -1,6 +1,6 @@
-// 🔰 Milvus 向量库：写入项目简介向量 + COSINE 相似度搜索，集合 insight_radar_project_profiles。推荐流程使用
 import { DataType, MetricType, MilvusClient } from '@zilliz/milvus2-sdk-node'
-import { buildProfileHash } from '@/lib/project-profile-service'
+import { embedProjectProfileQuery, embedProjectProfileTexts, getProjectProfileEmbeddingModel, getProjectProfileEmbeddingVersion, getProjectProfileVectorDimension } from '@/lib/embedding-service'
+import { buildProfileHash } from '@/lib/project-profile-hash'
 import type { GithubProject, ProjectSearchFilters } from '@/types/insight-radar'
 
 interface ProjectVectorSearchOptions {
@@ -9,56 +9,64 @@ interface ProjectVectorSearchOptions {
   limit: number
 }
 
-const collectionName = process.env.MILVUS_PROJECT_COLLECTION || 'insight_radar_project_profiles'
-const vectorDimension = Number(process.env.PROJECT_PROFILE_VECTOR_DIMENSION || 64)
+interface ProjectVectorSearchResult {
+  repositoryId: string
+  score: number
+  profileHash: string
+}
 
-// 🔰 将项目简介向量化后写入 Milvus，用于语义搜索
+const collectionName = process.env.MILVUS_PROJECT_PROFILE_COLLECTION || 'insight_radar_project_profiles_bge_m3_1024_v1'
+const defaultIvfNlist = 128
+const defaultIvfNprobe = 16
+
 export async function upsertProjectProfileVectors(projects: GithubProject[]) {
-  const projectsWithProfiles = projects.filter((project) => project.projectSummary)
+  const projectsWithProfiles = projects.filter((project) => project.projectSummary?.trim())
 
   if (projectsWithProfiles.length === 0 || !process.env.MILVUS_ADDRESS) {
     return
   }
 
-  try {
-    const client = await getMilvusClient()
-    await ensureProjectProfileCollection(client)
-    await client.upsert({
-      collection_name: collectionName,
-      data: projectsWithProfiles.map((project) => ({
-        repositoryId: project.repositoryId,
-        profileVector: createDeterministicVector(project.projectSummary ?? ''),
-        language: project.language,
-        sourceGithubUsername: project.sourceGithubUsername,
-        maturity: project.maturity,
-        githubUpdatedAt: new Date(project.githubUpdatedAt ?? project.updatedAt).getTime(),
-        stars: project.stars,
-        profileHash: buildProfileHash(project),
-        embeddingVersion: 'deterministic-local-v1',
-        indexedAt: Date.now(),
-      })),
-    })
-    await client.refreshLoad({ collection_name: collectionName })
-  } catch {
-    return
-  }
+  const profileTexts = projectsWithProfiles.map(buildProjectProfileEmbeddingText)
+  const profileVectors = await embedProjectProfileTexts(profileTexts)
+  const client = await getMilvusClient()
+
+  await ensureProjectProfileCollection(client)
+  await client.upsert({
+    collection_name: collectionName,
+    data: projectsWithProfiles.map((project, index) => ({
+      repositoryId: project.repositoryId,
+      profileVector: profileVectors[index],
+      language: project.language,
+      sourceGithubUsername: project.sourceGithubUsername,
+      maturity: project.maturity,
+      githubUpdatedAt: new Date(project.githubUpdatedAt ?? project.updatedAt).getTime(),
+      stars: project.stars,
+      profileHash: buildProfileHash({ ...project, projectSummary: project.projectSummary ?? '' }),
+      embeddingModel: getProjectProfileEmbeddingModel(),
+      embeddingVersion: getProjectProfileEmbeddingVersion(),
+      indexedAt: Date.now(),
+    })),
+  })
+  await client.refreshLoad({ collection_name: collectionName })
 }
 
-// 🔰 在 Milvus 中搜索语义相似的项目简介，结合结构化过滤和 COSINE 相似度排序
-export async function searchProjectProfileVectors({ query, filters, limit }: ProjectVectorSearchOptions) {
-  if (!process.env.MILVUS_ADDRESS) {
+export async function searchProjectProfileVectors({ query, filters, limit }: ProjectVectorSearchOptions): Promise<ProjectVectorSearchResult[]> {
+  if (!process.env.MILVUS_ADDRESS || !query.trim()) {
     return []
   }
 
   try {
     const client = await getMilvusClient()
     await ensureProjectProfileCollection(client)
+    const queryVector = await embedProjectProfileQuery(query)
     const result = await client.search({
       collection_name: collectionName,
-      data: [createDeterministicVector(query)],
+      data: [queryVector],
+      anns_field: 'profileVector',
       limit,
       filter: buildMilvusFilter(filters),
       metric_type: MetricType.COSINE,
+      params: { nprobe: Number(process.env.MILVUS_IVF_NPROBE || defaultIvfNprobe) },
       output_fields: ['repositoryId', 'language', 'sourceGithubUsername', 'maturity', 'githubUpdatedAt', 'stars', 'profileHash'],
     })
 
@@ -67,7 +75,9 @@ export async function searchProjectProfileVectors({ query, filters, limit }: Pro
       score: Number(item.score ?? 0),
       profileHash: String(item.profileHash ?? ''),
     }))
-  } catch {
+  } catch (error) {
+    console.error('[project-vector-store] 项目简介向量搜索失败:', error instanceof Error ? error.message : String(error))
+
     return []
   }
 }
@@ -113,42 +123,60 @@ async function ensureProjectProfileCollection(client: MilvusClient) {
       collection_name: collectionName,
       fields: [
         { name: 'repositoryId', data_type: DataType.VarChar, max_length: 64, is_primary_key: true },
-        { name: 'profileVector', data_type: DataType.FloatVector, dim: vectorDimension },
+        { name: 'profileVector', data_type: DataType.FloatVector, dim: getProjectProfileVectorDimension() },
         { name: 'language', data_type: DataType.VarChar, max_length: 64 },
         { name: 'sourceGithubUsername', data_type: DataType.VarChar, max_length: 128 },
         { name: 'maturity', data_type: DataType.VarChar, max_length: 32 },
         { name: 'githubUpdatedAt', data_type: DataType.Int64 },
         { name: 'stars', data_type: DataType.Int64 },
         { name: 'profileHash', data_type: DataType.VarChar, max_length: 128 },
+        { name: 'embeddingModel', data_type: DataType.VarChar, max_length: 64 },
         { name: 'embeddingVersion', data_type: DataType.VarChar, max_length: 64 },
         { name: 'indexedAt', data_type: DataType.Int64 },
       ],
       index_params: [
         {
           field_name: 'profileVector',
-          index_type: 'HNSW',
+          index_type: 'IVF_FLAT',
           metric_type: MetricType.COSINE,
-          params: { M: 16, efConstruction: 256 },
+          params: { nlist: Number(process.env.MILVUS_IVF_NLIST || defaultIvfNlist) },
         },
       ],
     })
+  } else {
+    await assertCompatibleCollection(client)
   }
 
   await client.loadCollection({ collection_name: collectionName })
 }
 
-function createDeterministicVector(text: string) {
-  const vector = Array.from({ length: vectorDimension }, () => 0)
-  const normalizedText = text.trim().toLowerCase()
+async function assertCompatibleCollection(client: MilvusClient) {
+  const collection = await client.describeCollection({ collection_name: collectionName })
+  const fields = collection.schema.fields
+  const fieldMap = new Map(fields.map((field) => [field.name, field]))
+  const requiredFields = ['repositoryId', 'profileVector', 'profileHash', 'embeddingModel', 'embeddingVersion', 'indexedAt']
 
-  for (let index = 0; index < normalizedText.length; index += 1) {
-    const code = normalizedText.charCodeAt(index)
-    vector[index % vectorDimension] += code / 65535
+  for (const fieldName of requiredFields) {
+    if (!fieldMap.has(fieldName)) {
+      throw new Error(`Milvus collection ${collectionName} 缺少字段 ${fieldName}，请使用新的 MILVUS_PROJECT_PROFILE_COLLECTION。`)
+    }
   }
 
-  const length = Math.hypot(...vector) || 1
+  const vectorField = fieldMap.get('profileVector')
+  const dimension = Number(vectorField?.dim)
 
-  return vector.map((value) => value / length)
+  if (dimension !== getProjectProfileVectorDimension()) {
+    throw new Error(`Milvus collection ${collectionName} 的 profileVector 维度为 ${dimension}，需要 ${getProjectProfileVectorDimension()}，请使用新的 MILVUS_PROJECT_PROFILE_COLLECTION。`)
+  }
+}
+
+function buildProjectProfileEmbeddingText(project: GithubProject) {
+  return [
+    `项目：${project.fullName}`,
+    `语言：${project.language}`,
+    `描述：${project.description}`,
+    `项目简介：${project.projectSummary ?? ''}`,
+  ].join('\n')
 }
 
 function escapeMilvusString(value: string) {

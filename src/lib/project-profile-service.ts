@@ -1,6 +1,6 @@
 // 🔰 项目简介服务：并发生成/重新生成项目 AI 简介（Mastra Agent + deepseek-v4-flash），写入 projects.readme_summary
-import { createHash } from 'crypto'
 import { mastra } from '@/mastra'
+import { upsertProjectProfileVectors } from '@/lib/project-vector-store'
 import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, searchProjectsFromDatabase, updateProjectProfile } from '@/lib/projects-repository'
 import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
@@ -12,6 +12,7 @@ const maxGeneratedProfilesPerRequest = 20
 const aiGenerateTimeoutMs = 30_000
 // 同批内并发 AI 调用数。不超过 maxGeneratedProfilesPerRequest，避免 Node 连接池瓶颈
 const aiGenerateConcurrency = 10
+const vectorUpsertTimeoutMs = Number(process.env.PROJECT_PROFILE_VECTOR_UPSERT_TIMEOUT_MS || 30_000)
 
 // 🔰 检查并生成缺失的项目简介（推荐前自动调用）。一次最多生成 20 个
 export async function ensureProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
@@ -103,12 +104,14 @@ export async function regenerateProjectProfiles(filters: ProjectSearchFilters, p
 }
 
 async function generateAndSaveProjectProfiles(projects: GithubProject[], preference: UserPreference, force: boolean) {
+  const savedProjects: GithubProject[] = []
   const tasks = projects
     .filter((project) => force || !project.projectSummary?.trim())
     .map((project) => async () => {
       try {
         const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
         await updateProjectProfile(project.repositoryId, profile)
+        savedProjects.push({ ...project, projectSummary: profile })
       } catch (error) {
         console.error(`项目简介生成失败 ${project.repositoryId}:`, error instanceof Error ? error.message : String(error))
       }
@@ -121,6 +124,20 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
       if (task) await task()
     }
   }))
+
+  try {
+    await withTimeout(upsertProjectProfileVectors(savedProjects), vectorUpsertTimeoutMs)
+  } catch (error) {
+    console.error('[project-profile] 项目简介向量入库失败:', error instanceof Error ? error.message : String(error))
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`操作超时 (${timeoutMs}ms)`)), timeoutMs),
+  )
+
+  return Promise.race([promise, timeout])
 }
 
 // 🔰 查询项目简介生成进度（未开始/进行中/已完成）
@@ -136,23 +153,6 @@ export async function getProjectProfileStatus(filters: ProjectSearchFilters): Pr
     totalCount,
     message: missingCount === 0 ? null : '有项目还没有生成项目简介',
   }
-}
-
-// 🔰 计算项目的 SHA256 哈希值，用于判断项目数据是否变更（向量搜索时过滤过期数据）
-export function buildProfileHash(project: GithubProject) {
-  return createHash('sha256')
-    .update([
-      project.repositoryId,
-      project.name,
-      project.fullName,
-      project.description,
-      project.projectSummary ?? '',
-      project.language,
-      project.maturity,
-      project.sourceGithubUsername,
-      project.githubUpdatedAt ?? project.updatedAt,
-    ].join('\n'))
-    .digest('hex')
 }
 
 // maxOutputTokens=1024 而非更小值的原因：
@@ -180,18 +180,18 @@ async function generateProjectProfile(project: GithubProject, prompt: string) {
     console.warn(`[project-profile] result 键: ${Object.keys(result).join(', ')}`)
   }
 
-  const profile = resolveProjectProfile(result.text, project)
+  const profile = resolveProjectProfile(result.text)
 
   return truncateProjectProfile(profile)
 }
 
-function resolveProjectProfile(text: string | undefined, project: GithubProject) {
+function resolveProjectProfile(text: string | undefined) {
   const profile = text?.trim()
 
-  return profile || buildFallbackProjectProfile(project)
+  return profile || buildFallbackProjectProfile()
 }
 
-function buildFallbackProjectProfile(_project: GithubProject) {
+function buildFallbackProjectProfile() {
   return '暂无项目简介。'
 }
 

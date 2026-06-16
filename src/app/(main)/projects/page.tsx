@@ -173,7 +173,7 @@ export default function ProjectsPage() {
           <h2 className="text-lg font-semibold">采集项目</h2>
         </div>
         {projects.length > 0 ? (
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-2">
             {paginatedProjects.map((project) => <ProjectCard key={project.repositoryId} project={project} />)}
           </div>
         ) : (

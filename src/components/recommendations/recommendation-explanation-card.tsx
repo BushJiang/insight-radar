@@ -23,7 +23,7 @@ export function RecommendationExplanationCard({ recommendation, projects }: Reco
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-8 xl:grid-cols-2">
+      <div className="grid gap-8 lg:grid-cols-2">
         {paginatedProjects.map((project) => {
           const reason = recommendation.reasons[project.repositoryId]
 

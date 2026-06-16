@@ -11,6 +11,10 @@ dist/
 build/
 .next/
 out/
+tsconfig.tsbuildinfo
+
+# ===== Local services =====
+volumes/milvus/
 
 # ===== OS files =====
 .DS_Store

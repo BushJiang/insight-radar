@@ -113,7 +113,7 @@ export default function SearchPage() {
           <LoadingMessage message="正在从项目库中搜索项目" />
         ) : projects.length > 0 ? (
           <>
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2">
               {projects.map((project) => <ProjectCard key={project.repositoryId} project={project} />)}
             </div>
             {totalCount > projectPageSize ? (

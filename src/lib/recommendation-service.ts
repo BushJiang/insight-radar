@@ -1,7 +1,8 @@
 // 🔰 智能推荐服务：从 PostgreSQL + Milvus 向量搜索候选项目 → Mastra Agent 逐项目生成推荐理由
 import { mastra } from '@/mastra'
 import { getProjectMapByRepositoryIds, listProjectsForRecommendation } from '@/lib/projects-repository'
-import { buildProfileHash, getProjectProfileStatus } from '@/lib/project-profile-service'
+import { buildProfileHash } from '@/lib/project-profile-hash'
+import { getProjectProfileStatus } from '@/lib/project-profile-service'
 import { searchProjectProfileVectors, upsertProjectProfileVectors } from '@/lib/project-vector-store'
 import type { GithubProject, ProjectSearchFilters, RecommendationExplanation, UserPreference } from '@/types/insight-radar'
 
@@ -55,22 +56,35 @@ export async function generateProjectRecommendations({ query, filters, recommend
 // 🔰 从数据库 + 向量搜索获取候选项目，向量搜索无结果时回退到数据库列表
 async function getCandidateProjects(query: string, filters: ProjectSearchFilters, limit: number) {
   const fallbackProjects = await listProjectsForRecommendation({ ...filters, limit })
-// 🔰 将项目简介向量化后写入 Milvus，用于语义搜索
-  await upsertProjectProfileVectors(fallbackProjects)
-// 🔰 在 Milvus 中搜索语义相似的项目，结合 COSINE 相似度排序
-  const vectorResults = await searchProjectProfileVectors({ query, filters, limit })
+  let vectorResults = await searchProjectProfileVectors({ query, filters, limit })
+  let projects = await resolveFreshVectorProjects(vectorResults)
 
+  if (projects.length > 0) {
+    return projects
+  }
+
+  try {
+    await upsertProjectProfileVectors(fallbackProjects)
+    vectorResults = await searchProjectProfileVectors({ query, filters, limit })
+    projects = await resolveFreshVectorProjects(vectorResults)
+  } catch (error) {
+    console.error('[recommendation] 项目简介向量补写失败:', error instanceof Error ? error.message : String(error))
+  }
+
+  return projects.length > 0 ? projects : fallbackProjects
+}
+
+async function resolveFreshVectorProjects(vectorResults: Array<{ repositoryId: string; profileHash: string }>) {
   if (vectorResults.length === 0) {
-    return fallbackProjects
+    return []
   }
 
   const projectMap = await getProjectMapByRepositoryIds(vectorResults.map((result) => result.repositoryId))
-  const projects = vectorResults
+
+  return vectorResults
     .map((result) => projectMap.get(result.repositoryId))
     .filter((project): project is GithubProject => Boolean(project))
     .filter((project) => buildProfileHash(project) === vectorResults.find((result) => result.repositoryId === project.repositoryId)?.profileHash)
-
-  return projects.length > 0 ? projects : fallbackProjects
 }
 
 // 🔰 对每个候选项目调用 Mastra Agent 并发生成推荐理由
