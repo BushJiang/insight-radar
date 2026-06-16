@@ -1,3 +1,4 @@
+// 🔰 智能推荐服务：从 PostgreSQL + Milvus 向量搜索候选项目 → Mastra Agent 逐项目生成推荐理由
 import { mastra } from '@/mastra'
 import { getProjectMapByRepositoryIds, listProjectsForRecommendation } from '@/lib/projects-repository'
 import { buildProfileHash, getProjectProfileStatus } from '@/lib/project-profile-service'
@@ -107,7 +108,7 @@ function normalizeRecommendationReason(text: string | undefined, project: Github
 
 function buildFallbackRecommendationReason(project: GithubProject, query: string) {
   const demandText = query || '当前项目需求'
-  const profile = project.readmeSummary ?? project.description
+  const profile = project.projectSummary ?? project.description
 
   return sanitizeRecommendationReason(`${project.fullName} 适合“${demandText}”。${profile}`)
 }
@@ -129,7 +130,7 @@ function buildRecommendationReasonPrompt({ query, preference, recommendationLimi
     domainPreferences: domainsText,
     query: query || '用户未填写具体需求，请基于领域偏好推荐。',
     projectFullName: project.fullName,
-    readmeSummary: project.readmeSummary ?? '暂无项目简介',
+    projectSummary: project.projectSummary ?? '暂无项目简介',
     projectLanguage: project.language,
     maturity: project.maturity,
     stars: String(project.stars),
@@ -145,7 +146,7 @@ function buildRecommendationReasonPrompt({ query, preference, recommendationLimi
 项目数据：
 仓库：${project.fullName}
 描述：${project.description}
-项目简介：${project.readmeSummary ?? '暂无项目简介'}
+项目简介：${project.projectSummary ?? '暂无项目简介'}
 语言：${project.language}
 成熟度：${project.maturity}
 Stars：${project.stars}

@@ -1,3 +1,4 @@
+// 🔰 shadcn/ui Select 基础组件：下拉选择框（Radix UI 封装），所有页面通用
 "use client"
 
 import * as React from "react"

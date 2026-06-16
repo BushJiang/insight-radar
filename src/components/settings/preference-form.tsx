@@ -1,3 +1,4 @@
+// 🔰 用户偏好表单：领域选择 + 推荐/简介提示词模板 + 候选数量，数据保存到 localStorage。设置页使用
 'use client'
 
 import { useState } from 'react'
@@ -136,7 +137,7 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
           onChange={(event) => updatePreference({ recommendationAgentPrompt: event.target.value })}
           placeholder="请输入项目推荐提示词"
         />
-        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{domainPreferences}}'}（领域偏好）、{'{{query}}'}（用户需求）、{'{{projectFullName}}'}（仓库全名）、{'{{readmeSummary}}'}（项目简介）、{'{{projectLanguage}}'}（主要语言）、{'{{maturity}}'}（项目成熟度）、{'{{stars}}'}（Stars 数量）、{'{{sourceGithubUsername}}'}（来源账号）。</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{domainPreferences}}'}（领域偏好）、{'{{query}}'}（用户需求）、{'{{projectFullName}}'}（仓库全名）、{'{{projectSummary}}'}（项目简介）、{'{{projectLanguage}}'}（主要语言）、{'{{maturity}}'}（项目成熟度）、{'{{stars}}'}（Stars 数量）、{'{{sourceGithubUsername}}'}（来源账号）。</p>
       </PreferenceCard>
 
       <PreferenceCard title="项目简介提示词">
@@ -166,11 +167,11 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
         <Button
           type="button"
           onClick={saveSettings}
-          className="bg-emerald-700 hover:bg-emerald-800 active:scale-95"
+          className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95"
         >
           保存设置
         </Button>
-        <p className={`mt-3 text-sm text-emerald-600 dark:text-emerald-300 ${saved ? 'visible' : 'invisible'}`}>{saved ? '设置已保存到本地。' : '占位'}</p>
+        <p className={`mt-3 text-sm text-brand-text dark:text-emerald-300 ${saved ? 'visible' : 'invisible'}`}>{saved ? '设置已保存到本地。' : '占位'}</p>
       </div>
     </div>
   )
@@ -204,8 +205,8 @@ function CheckboxGroup<T extends string>({ values, selected, onToggle }: Checkbo
   return (
     <div className="flex flex-wrap gap-2">
       {values.map((value) => (
-        <label key={value} className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${selected.includes(value) ? 'border-emerald-700 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-slate-200 dark:border-slate-700'}`}>
-          <span className={`flex h-4 w-4 items-center justify-center rounded border transition ${selected.includes(value) ? 'border-emerald-700 bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-600' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'}`}>
+        <label key={value} className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${selected.includes(value) ? 'border-brand-primary bg-brand-soft text-brand-text dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-slate-200 dark:border-slate-700'}`}>
+          <span className={`flex h-4 w-4 items-center justify-center rounded border transition ${selected.includes(value) ? 'border-brand-primary bg-brand-primary dark:border-emerald-600 dark:bg-emerald-600' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'}`}>
             {selected.includes(value) ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
           </span>
           <input type="checkbox" checked={selected.includes(value)} onChange={() => onToggle(value)} className="sr-only" />
@@ -227,8 +228,8 @@ interface OtherInputProps {
 function OtherInput({ label, checked, value, onCheckedChange, onValueChange }: OtherInputProps) {
   return (
     <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-      <label className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${checked ? 'border-emerald-700 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-slate-200 dark:border-slate-700'}`}>
-        <span className={`flex h-4 w-4 items-center justify-center rounded border transition ${checked ? 'border-emerald-700 bg-emerald-700 dark:border-emerald-600 dark:bg-emerald-600' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'}`}>
+      <label className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-sm transition ${checked ? 'border-brand-primary bg-brand-soft text-brand-text dark:border-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'border-slate-200 dark:border-slate-700'}`}>
+        <span className={`flex h-4 w-4 items-center justify-center rounded border transition ${checked ? 'border-brand-primary bg-brand-primary dark:border-emerald-600 dark:bg-emerald-600' : 'border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900'}`}>
           {checked ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
         </span>
         <input type="checkbox" checked={checked} onChange={(event) => onCheckedChange(event.target.checked)} className="sr-only" />

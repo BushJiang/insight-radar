@@ -1,3 +1,4 @@
+// 🔰 搜索栏：关键词输入 + 四个下拉筛选（来源/语言/成熟度/时间范围）+ 搜索按钮。搜索页使用
 'use client'
 
 import type { ProjectMaturity, ProjectSearchFilters } from '@/types/insight-radar'
@@ -18,7 +19,7 @@ interface ProjectSearchBarProps {
 export function ProjectSearchBar({ filters, sources, loading = false, onSearch, onChange, onSourceInputFocus }: ProjectSearchBarProps) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 lg:grid-cols-[minmax(280px,1fr)_120px]">
+      <div className="grid items-end gap-3 lg:grid-cols-[minmax(280px,1fr)_120px]">
         <div>
           <Label htmlFor="query">项目搜索</Label>
           <Input
@@ -31,7 +32,7 @@ export function ProjectSearchBar({ filters, sources, loading = false, onSearch, 
             placeholder="输入关键词，搜索项目名称、描述、README"
           />
         </div>
-        <Button type="button" disabled={loading} onClick={onSearch} className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:bg-slate-400">
+        <Button type="button" disabled={loading} onClick={onSearch} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95 disabled:bg-slate-400">
           搜索
         </Button>
       </div>
@@ -45,4 +46,3 @@ export function ProjectSearchBar({ filters, sources, loading = false, onSearch, 
     </div>
   )
 }
-

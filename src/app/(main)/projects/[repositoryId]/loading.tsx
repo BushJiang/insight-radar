@@ -1,3 +1,4 @@
+// 🔰 项目详情加载骨架屏：数据加载中展示灰色脉冲动画占位
 export default function ProjectDetailLoading() {
   return (
     <div className="space-y-6">

@@ -1,3 +1,4 @@
+// 🔰 推荐页加载骨架屏：数据加载中展示灰色脉冲动画占位
 export default function RecommendationsLoading() {
   return (
     <div className="space-y-6">

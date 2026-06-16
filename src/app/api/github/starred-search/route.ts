@@ -1,15 +1,19 @@
+// 🔰 POST /api/github/starred-search — 采集指定 GitHub 账号 Star 的项目并存入数据库
 import { ZodError } from 'zod'
 import { GithubApiError, searchGithubStarredProjects } from '@/lib/github-starred'
 import { handleZodError } from '@/lib/api-validation'
 import { githubStarredSearchSchema } from '@/validations/api-schemas'
 import type { GithubStarredSearchResponse } from '@/types/insight-radar'
 
-// 🔰 POST /api/github/starred-search — 采集指定 GitHub 账号 Star 的项目并存入数据库
 export async function POST(req: Request) {
   try {
     const body = githubStarredSearchSchema.parse(await req.json())
-// 🔰 通过 GitHub GraphQL API 获取指定账号 Star 的项目，提取 README 并推断成熟度
-    const result = await searchGithubStarredProjects({ filters: body.filters, githubToken: body.githubToken, maxProjects: body.maxProjects })
+    // 🔰 通过 GitHub GraphQL API 获取指定账号 Star 的项目，提取 README 并推断成熟度
+    const result = await searchGithubStarredProjects({
+      filters: body.filters,
+      githubToken: body.githubToken,
+      maxProjects: body.maxProjects
+    })
 
     return Response.json(result)
   } catch (error) {

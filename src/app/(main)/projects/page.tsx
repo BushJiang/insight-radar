@@ -1,3 +1,4 @@
+// 🔰 创建项目库页：客户端组件，通过 GithubUsernameForm 采集 Star 项目，分页展示，状态存 localStorage
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
@@ -12,8 +13,10 @@ import type { CollectionJob, CollectionProgress, GithubProject, ProjectsPageSnap
 
 // 每页显示的项目卡片数量
 const projectPageSize = 4
+// 🔰 localStorage 中存储项目库页面状态的 key
 const projectsStorageKey = 'insight-radar-projects-page-state'
 
+// 🔰 项目库页面状态结构：最新采集任务、当前页码、采集进度、项目快照
 interface ProjectsPageState {
   latestJob: CollectionJob
   currentPage: number
@@ -21,6 +24,7 @@ interface ProjectsPageState {
   snapshot: ProjectsPageSnapshot
 }
 
+// 🔰 采集任务的初始值（pending 状态、空用户名、计数归零）
 const initialCollectionJob: CollectionJob = {
   id: 'collection-job-empty',
   githubUsername: '暂无',
@@ -35,6 +39,7 @@ const initialCollectionJob: CollectionJob = {
   rateLimitResetAt: null,
 }
 
+// 🔰 项目库页面状态的初始值：第一页、空项目列表、未开始的采集任务
 const initialProjectsPageState: ProjectsPageState = {
   latestJob: initialCollectionJob,
   currentPage: 1,
@@ -46,11 +51,17 @@ const initialProjectsPageState: ProjectsPageState = {
   },
 }
 
+// 🔰 项目库页面主组件：采集表单 + 任务状态卡片 + 分页项目列表，页面状态通过 useBrowserStorage 持久化到 localStorage
 export default function ProjectsPage() {
+  // 🔰 页面状态（页码、进度、快照），通过 useBrowserStorage 持久化到 localStorage
   const [pageState, setPageState] = useBrowserStorage(projectsStorageKey, initialProjectsPageState)
+  // 🔰 采集表单的草稿状态（GitHub 用户名、天数、最大项目数），从 transient-form-state 恢复
   const [projectDraft, setProjectDraft] = useState(() => readTransientFormState().projects)
+  // 🔰 从页面状态中提取项目列表
   const projects = pageState.snapshot.items
+  // 🔰 根据项目总数和每页数量计算总页数，最小为 1
   const totalPages = Math.max(1, Math.ceil(projects.length / projectPageSize))
+  // 🔰 根据当前页切片项目列表，仅在 projects 或 currentPage 变化时重新计算
   const paginatedProjects = useMemo(() => projects.slice((pageState.currentPage - 1) * projectPageSize, pageState.currentPage * projectPageSize), [projects, pageState.currentPage])
 
   // 🔰 更新页面状态（页码、进度、快照），合并到现有状态
@@ -58,6 +69,7 @@ export default function ProjectsPage() {
     setPageState((currentState) => ({ ...currentState, ...nextState }))
   }, [setPageState])
 
+  // 🔰 采集完成后回调：重置到第一页，更新项目快照和来源用户名
   function handleProjectsCollected(nextProjects: GithubProject[]) {
     updatePageState({
       currentPage: 1,
@@ -69,6 +81,7 @@ export default function ProjectsPage() {
     })
   }
 
+  // 🔰 采集进度变化回调：根据 running/success/failed 状态更新 latestJob 和 progress
   function handleProgressChange(nextProgress: CollectionProgress) {
     let nextLatestJob = pageState.latestJob
 
@@ -195,7 +208,7 @@ function CollectionProgressCard({ progress }: { progress: CollectionProgress | n
       : `已采集 ${progress.fetchedCount.toLocaleString('zh-CN')} / ${progress.estimatedTotalCount.toLocaleString('zh-CN')} 个项目`
 
   return (
-    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+    <div className="rounded-2xl border border-brand-ring bg-brand-soft p-5 text-sm text-brand-text dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
       <p className="font-medium">{title}</p>
       <p className="mt-2">{countText}</p>
       {progress.errorMessage ? <p className="mt-2 text-red-600 dark:text-red-300">{progress.errorMessage}</p> : null}

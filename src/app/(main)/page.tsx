@@ -1,11 +1,12 @@
+// 🔰 首页：服务端组件 + ISR（revalidate=3600），展示项目统计、来源账号、最新关注项目
 import Link from 'next/link'
 import { StatusBadge } from '@/components/layout/status-badge'
 import { Container } from '@/components/shared/container'
 import { ProjectCard } from '@/components/projects/project-card'
 import { Button } from '@/components/ui/button'
 import { getHomeMetrics, getLatestProjects } from '@/lib/projects-repository'
-
-export const revalidate = 3600
+// 使用ISR缓存，60s自动刷新
+export const revalidate = 60
 
 export default async function Home() {
   const [metrics, latestProjects] = await Promise.all([
@@ -32,7 +33,7 @@ export default async function Home() {
             <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">创建项目库</h2>
             <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">输入你认可的 GitHub 账号，采集其关注项目并沉淀到项目库。</p>
           </div>
-          <Button asChild className="bg-emerald-600 hover:bg-emerald-700 active:scale-95">
+          <Button asChild className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
             <Link href="/projects">创建项目库</Link>
           </Button>
         </div>
@@ -45,9 +46,9 @@ export default async function Home() {
         <MetricCard label="来源账号">
           <div className="flex flex-wrap gap-2">
             {visibleSourceUsernames.map((username) => (
-              <StatusBadge key={username} variant="neutral" label={username} />
+              <StatusBadge key={username} variant="brand" label={username} />
             ))}
-            {hasMoreSources ? <StatusBadge variant="neutral" label="..." /> : null}
+            {hasMoreSources ? <StatusBadge variant="brand" label="..." /> : null}
             {visibleSourceUsernames.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">暂无来源账号</p> : null}
           </div>
         </MetricCard>
@@ -56,7 +57,7 @@ export default async function Home() {
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">最新关注项目</h2>
-          <Link href="/search" className="text-sm font-medium text-emerald-700 transition hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200">
+          <Link href="/search" className="text-sm font-medium text-brand-text transition hover:text-brand-text-hover dark:text-emerald-300 dark:hover:text-emerald-200">
             搜索项目
           </Link>
         </div>

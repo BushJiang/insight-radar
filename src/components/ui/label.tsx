@@ -1,3 +1,4 @@
+// 🔰 shadcn/ui Label 基础组件：表单标签，所有页面通用
 "use client"
 
 import * as React from "react"

@@ -1,3 +1,4 @@
+// 🔰 GitHub Star 采集：GraphQL API 分页拉取 Star 仓库 + REST API 取 README + 推断成熟度 + 去重写入 DB
 import { persistCollectedProjects, searchProjectsFromDatabase } from '@/lib/projects-repository'
 import type { GithubProject, GithubStarredSearchResponse, ProjectMaturity, ProjectSearchFilters } from '@/types/insight-radar'
 
@@ -95,7 +96,7 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
 
   const { edges, totalCount } = await fetchStarredReposViaGraphql(username, filters.days, maxProjects ?? defaultMaxFetchedRepositories, githubToken?.trim())
   const collectedProjects = await Promise.all(edges.map((edge) => mapRepoEdgeToProject(edge, username, githubToken?.trim())))
-// 🔰 将采集到的项目写入 PostgreSQL，已存在的更新元数据
+  // 🔰 将采集到的项目写入 PostgreSQL，已存在的更新元数据
   const persistedResult = await persistCollectedProjects(collectedProjects)
   const projects = filters.query.trim()
     ? (await searchProjectsFromDatabase({
@@ -196,7 +197,7 @@ async function mapRepoEdgeToProject(edge: GraphqlStarredEdge, username: string, 
     updatedAt: node.updatedAt,
     githubUpdatedAt: node.updatedAt,
     pushedAt: node.pushedAt,
-    readmeSummary: null,
+    projectSummary: null,
     readmeContent,
     topics: node.repositoryTopics.nodes.map((n) => n.topic.name),
     license: node.licenseInfo?.spdxId || node.licenseInfo?.name || null,
@@ -212,7 +213,7 @@ async function mapRepoEdgeToProject(edge: GraphqlStarredEdge, username: string, 
   }
 }
 
-// README 通过 REST API 获取，可以正确处理任意文件名、大小写、子目录
+// GraphQL 无法直接拿到 README，所以通过 REST API 获取
 async function fetchReadmeViaApi(fullName: string, githubToken?: string) {
   const url = `https://api.github.com/repos/${fullName}/readme`
   const response = await fetch(url, {

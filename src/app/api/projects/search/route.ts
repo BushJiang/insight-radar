@@ -1,3 +1,4 @@
+// 🔰 POST /api/projects/search — 搜索高价值项目库，支持关键词、语言、成熟度等筛选
 import { ZodError } from 'zod'
 import { resolveErrorMessage } from '@/lib/api-response'
 import { handleZodError } from '@/lib/api-validation'
@@ -5,7 +6,6 @@ import { listCollectedSourceGithubUsernames, searchProjectsFromDatabase } from '
 import { searchProjectsSchema } from '@/validations/api-schemas'
 import type { SearchProjectsResponse } from '@/types/insight-radar'
 
-// 🔰 POST /api/projects/search — 搜索高价值项目库，支持关键词、语言、成熟度等筛选
 export async function POST(req: Request) {
   try {
     const body = searchProjectsSchema.parse(await req.json())

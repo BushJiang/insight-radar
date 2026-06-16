@@ -1,3 +1,4 @@
+// 🔰 shadcn/ui Textarea 基础组件：多行文本输入框，设置页和推荐面板使用
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

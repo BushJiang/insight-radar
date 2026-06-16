@@ -1,3 +1,4 @@
+// 🔰 推荐页错误边界：数据加载失败时展示错误信息和重试按钮
 'use client'
 
 import { Button } from '@/components/ui/button'

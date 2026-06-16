@@ -1,3 +1,4 @@
+// 🔰 POST /api/project-profiles — 项目简介生成（action='status'查询 / 'generate'生成 / 'regenerate'重新生成）
 import { resolveErrorMessage } from '@/lib/api-response'
 import { normalizePreference } from '@/lib/default-preference'
 import { generateMissingProjectProfiles, getProjectProfileStatus, regenerateProjectProfiles } from '@/lib/project-profile-service'
@@ -24,7 +25,6 @@ interface ProjectProfilesResponseBody {
   error: string | null
 }
 
-// 🔰 POST /api/project-profiles — 项目简介生成（action='status'查询/'generate'生成/'regenerate'重新生成）
 export async function POST(req: Request) {
   try {
     const body = await req.json() as ProjectProfilesRequestBody

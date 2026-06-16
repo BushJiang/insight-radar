@@ -1,3 +1,4 @@
+// 🔰 POST /api/recommendations — 智能推荐：向量语义搜索候选项目 + Mastra Agent 生成推荐理由
 import { ZodError } from 'zod'
 import { resolveErrorMessage } from '@/lib/api-response'
 import { handleZodError } from '@/lib/api-validation'

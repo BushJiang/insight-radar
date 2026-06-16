@@ -1,3 +1,4 @@
+// 🔰 Milvus 向量库：写入项目简介向量 + COSINE 相似度搜索，集合 insight_radar_project_profiles。推荐流程使用
 import { DataType, MetricType, MilvusClient } from '@zilliz/milvus2-sdk-node'
 import { buildProfileHash } from '@/lib/project-profile-service'
 import type { GithubProject, ProjectSearchFilters } from '@/types/insight-radar'
@@ -13,7 +14,7 @@ const vectorDimension = Number(process.env.PROJECT_PROFILE_VECTOR_DIMENSION || 6
 
 // 🔰 将项目简介向量化后写入 Milvus，用于语义搜索
 export async function upsertProjectProfileVectors(projects: GithubProject[]) {
-  const projectsWithProfiles = projects.filter((project) => project.readmeSummary)
+  const projectsWithProfiles = projects.filter((project) => project.projectSummary)
 
   if (projectsWithProfiles.length === 0 || !process.env.MILVUS_ADDRESS) {
     return
@@ -26,7 +27,7 @@ export async function upsertProjectProfileVectors(projects: GithubProject[]) {
       collection_name: collectionName,
       data: projectsWithProfiles.map((project) => ({
         repositoryId: project.repositoryId,
-        profileVector: createDeterministicVector(project.readmeSummary ?? ''),
+        profileVector: createDeterministicVector(project.projectSummary ?? ''),
         language: project.language,
         sourceGithubUsername: project.sourceGithubUsername,
         maturity: project.maturity,

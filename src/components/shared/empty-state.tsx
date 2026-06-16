@@ -1,3 +1,4 @@
+// 🔰 空状态占位：数据为空时的虚线边框提示框。搜索/推荐/项目库等多页复用
 interface EmptyStateProps {
   message: string
 }

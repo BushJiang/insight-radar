@@ -1,3 +1,4 @@
+// 🔰 错误提示：红色边框的错误信息展示框。搜索/推荐等多页复用
 interface ErrorMessageProps {
   message: string
 }

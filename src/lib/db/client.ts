@@ -1,3 +1,4 @@
+// 🔰 数据库连接：Drizzle ORM + postgres.js 单例连接，通过 DATABASE_URL 环境变量配置
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from '@/lib/db/schema'

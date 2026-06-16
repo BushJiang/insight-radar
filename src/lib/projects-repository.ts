@@ -1,3 +1,4 @@
+// 🔰 项目数据访问层：projects 表 CRUD、搜索（ILIKE 多条件）、统计查询、简介更新。所有 API 路由的数据入口
 import { and, asc, count, eq, gte, ilike, inArray, isNull, notInArray, or, sql } from 'drizzle-orm'
 import { getDb } from '@/lib/db/client'
 import { projects } from '@/lib/db/schema'
@@ -147,10 +148,10 @@ export async function getProjectByRepositoryId(repositoryId: string) {
   return project ? toGithubProject(project) : null
 }
 
-// 🔰 统计 readmeSummary 为空的缺失简介项目数
+// 🔰 统计 projectSummary 为空的缺失简介项目数
 export async function countProjectsMissingProfiles(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null }) {
   const db = getDb()
-  const where = and(...buildProjectSearchConditions(filters), sql`${projects.readmeSummary} is null or trim(${projects.readmeSummary}) = ''`)
+  const where = and(...buildProjectSearchConditions(filters), sql`${projects.projectSummary} is null or trim(${projects.projectSummary}) = ''`)
   const [row] = await db.select({ value: count() }).from(projects).where(where)
 
   return row?.value ?? 0
@@ -159,7 +160,7 @@ export async function countProjectsMissingProfiles(filters: { query: string; lan
 // 🔰 批量查询缺失简介的项目列表，按采集时间倒序，最多返回 limit 条
 export async function listProjectsMissingProfiles(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; limit: number }) {
   const db = getDb()
-  const where = and(...buildProjectSearchConditions(filters), sql`${projects.readmeSummary} is null or trim(${projects.readmeSummary}) = ''`)
+  const where = and(...buildProjectSearchConditions(filters), sql`${projects.projectSummary} is null or trim(${projects.projectSummary}) = ''`)
   const rows = await db.select().from(projects).where(where).orderBy(sql`${projects.starAt} desc`).limit(Math.max(1, filters.limit))
 
   return rows.map(toGithubProject)
@@ -168,7 +169,7 @@ export async function listProjectsMissingProfiles(filters: { query: string; lang
 // 🔰 将 AI 生成的项目简介写入数据库
 export async function updateProjectProfile(repositoryId: string, profile: string) {
   const db = getDb()
-  await db.update(projects).set({ readmeSummary: profile, updatedAt: new Date() }).where(eq(projects.repositoryId, repositoryId))
+  await db.update(projects).set({ projectSummary: profile, updatedAt: new Date() }).where(eq(projects.repositoryId, repositoryId))
 }
 
 // 🔰 推荐用的项目列表查询：筛选条件 + 按 stars 降序排列
@@ -209,7 +210,7 @@ function buildProjectSearchConditions(filters: { query: string; languages: strin
       ilike(projects.name, keyword),
       ilike(projects.fullName, keyword),
       ilike(projects.description, keyword),
-      ilike(projects.readmeSummary, keyword),
+      ilike(projects.projectSummary, keyword),
       ilike(projects.readmeContent, keyword),
     )!)
   }
@@ -263,7 +264,7 @@ function toProjectRecord(project: GithubProject): typeof projects.$inferInsert {
     pushedAt: project.pushedAt ? new Date(project.pushedAt) : null,
     githubUpdatedAt: new Date(project.githubUpdatedAt ?? project.updatedAt),
     readmeContent: project.readmeContent,
-    readmeSummary: project.readmeSummary,
+    projectSummary: project.projectSummary,
     matchReason: project.matchReason,
     maturity: project.maturity,
     collectionJobId: project.collectionJobId,
@@ -318,7 +319,7 @@ export function toGithubProject(project: typeof projects.$inferSelect): GithubPr
     deletedAt: project.deletedAt?.toISOString() ?? null,
     notes: project.notes,
     pushedAt: project.pushedAt?.toISOString() ?? null,
-    readmeSummary: project.readmeSummary,
+    projectSummary: project.projectSummary,
     readmeContent: project.readmeContent,
     topics: project.topics,
     license: project.license,

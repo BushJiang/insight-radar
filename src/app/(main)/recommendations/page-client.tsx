@@ -1,3 +1,4 @@
+// 🔰 智能推荐页客户端组件：管理推荐表单状态、简介生成轮询、AI 推荐请求，表单状态存模块内存（transient-form-state）
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
@@ -23,7 +24,7 @@ const initialProgress: ProjectProfileProgress = {
 }
 
 export default function RecommendationsPageClient({ initialProjects }: RecommendationsPageClientProps) {
-  // 🔰 从 sessionStorage 恢复上次离开页面时的表单状态，避免刷新后丢失
+  // 🔰 从 transient-form-state 恢复上次的表单状态，SPA 路由跳转不丢失，但刷新页面后重置为默认值
   const recommendationDraft = readTransientFormState().recommendations
   // 🔰 用户输入的表单状态（推荐数量、筛选条件、需求描述、推荐结果）
   const [recommendationLimit, setRecommendationLimit] = useState(recommendationDraft.recommendationLimit)
@@ -45,7 +46,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   // 🔰 进入页面或筛选条件变化时，自动查询项目简介生成进度
   useEffect(() => {
     let cancelled = false
-
+    // 查询项目简介的生成进度
     async function loadProfileStatus() {
       try {
         const result = await requestProjectProfiles('status', filters, [])
@@ -221,52 +222,52 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
 
   return (
     <main className="space-y-6">
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">智能推荐</h2>
-          </div>
-          <RecommendationRequestPanel
-            query={query}
-            filters={filters}
-            sources={sources}
-            loading={loading}
-            recommending={recommending}
-            profileRunning={loading && !recommending}
-            canGenerateProfiles={canGenerateProfiles}
-            recommendationLimit={recommendationLimit}
-            onQueryChange={(nextQuery) => {
-              setQuery(nextQuery)
-              writeTransientRecommendationFormState({ query: nextQuery })
-            }}
-            onFiltersChange={(nextFilters) => {
-              const resolvedFilters = { ...filters, ...nextFilters }
-              setFilters(resolvedFilters)
-              writeTransientRecommendationFormState({ filters: resolvedFilters })
-            }}
-            onRecommendationLimitChange={(limit) => {
-              setRecommendationLimit(limit)
-              writeTransientRecommendationFormState({ recommendationLimit: limit })
-            }}
-            onSourceInputFocus={ensureSourcesLoaded}
-            onSubmit={() => void handleRecommend()}
-            onGenerateProfiles={() => void handleGenerateProfiles()}
-            onRegenerateProfiles={() => void handleRegenerateProfiles()}
-          />
-          <ProjectProfileProgressCard progress={progress} />
-          {error ? <ErrorMessage message={error} /> : null}
-        </section>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">智能推荐</h2>
+        </div>
+        <RecommendationRequestPanel
+          query={query}
+          filters={filters}
+          sources={sources}
+          loading={loading}
+          recommending={recommending}
+          profileRunning={loading && !recommending}
+          canGenerateProfiles={canGenerateProfiles}
+          recommendationLimit={recommendationLimit}
+          onQueryChange={(nextQuery) => {
+            setQuery(nextQuery)
+            writeTransientRecommendationFormState({ query: nextQuery })
+          }}
+          onFiltersChange={(nextFilters) => {
+            const resolvedFilters = { ...filters, ...nextFilters }
+            setFilters(resolvedFilters)
+            writeTransientRecommendationFormState({ filters: resolvedFilters })
+          }}
+          onRecommendationLimitChange={(limit) => {
+            setRecommendationLimit(limit)
+            writeTransientRecommendationFormState({ recommendationLimit: limit })
+          }}
+          onSourceInputFocus={ensureSourcesLoaded}
+          onSubmit={() => void handleRecommend()}
+          onGenerateProfiles={() => void handleGenerateProfiles()}
+          onRegenerateProfiles={() => void handleRegenerateProfiles()}
+        />
+        <ProjectProfileProgressCard progress={progress} />
+        {error ? <ErrorMessage message={error} /> : null}
+      </section>
 
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">推荐结果</h2>
-          </div>
-          {recommendations.length > 0 ? recommendations.map((recommendation) => (
-            <RecommendationExplanationCard key={recommendation.id} recommendation={recommendation} projects={projects} />
-          )) : (
-            <EmptyState message="输入项目需求并点击智能推荐后，这里会展示推荐结果。" />
-          )}
-        </section>
-      </main>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">推荐结果</h2>
+        </div>
+        {recommendations.length > 0 ? recommendations.map((recommendation) => (
+          <RecommendationExplanationCard key={recommendation.id} recommendation={recommendation} projects={projects} />
+        )) : (
+          <EmptyState message="输入项目需求并点击智能推荐后，这里会展示推荐结果。" />
+        )}
+      </section>
+    </main>
   )
 }
 
@@ -329,7 +330,7 @@ function ProjectProfileProgressCard({ progress }: { progress: ProjectProfileProg
         <p className="text-sm tabular-nums text-slate-500 dark:text-slate-400">{progress.completedCount}/{progress.totalCount}</p>
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div className="h-full rounded-full bg-emerald-600 transition-all" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-brand-primary transition-all" style={{ width: `${percent}%` }} />
       </div>
     </div>
   )

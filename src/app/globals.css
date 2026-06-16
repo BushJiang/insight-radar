@@ -9,6 +9,7 @@
   --brand-primary-hover: oklch(0.36 0.11 160);
   --brand-primary-soft: oklch(0.96 0.04 160);
   --brand-primary-text: oklch(0.39 0.11 160);
+  --brand-primary-text-hover: oklch(0.33 0.11 160);
   --brand-primary-ring: oklch(0.88 0.09 160);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -51,6 +52,7 @@
   --color-brand-primary-hover: var(--brand-primary-hover);
   --color-brand-soft: var(--brand-primary-soft);
   --color-brand-text: var(--brand-primary-text);
+  --color-brand-text-hover: var(--brand-primary-text-hover);
   --color-brand-ring: var(--brand-primary-ring);
   --font-sans: var(--font-sans);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;

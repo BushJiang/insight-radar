@@ -1,3 +1,4 @@
+// 🔰 GitHub 用户名校验：正则验证用户名格式合法性（1-39 位字母数字连字符），采集表单使用
 const githubUsernamePattern = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/
 
 export function validateGithubUsername(username: string) {

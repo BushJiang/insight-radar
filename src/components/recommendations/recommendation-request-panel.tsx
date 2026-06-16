@@ -1,3 +1,4 @@
+// 🔰 推荐请求面板：项目需求输入 + 筛选条件 + 推荐数量 + 智能推荐/生成简介/重新生成按钮。推荐页使用
 'use client'
 
 import type { ProjectMaturity, ProjectSearchFilters } from '@/types/insight-radar'

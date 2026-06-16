@@ -1,3 +1,4 @@
+// 🔰 分页控件：上一页/下一页 + 智能省略页码，shadcn Button 实现。搜索页和项目库页复用
 'use client'
 
 import { Button } from '@/components/ui/button'
@@ -32,6 +33,7 @@ export function ProjectPagination({ currentPage, totalPages, totalItems, onPageC
             key={item}
             type="button"
             variant={item === currentPage ? 'default' : 'outline'}
+            className={item === currentPage ? 'bg-brand-primary hover:bg-brand-primary-hover' : ''}
             onClick={() => onPageChange(item)}
           >
             {item}

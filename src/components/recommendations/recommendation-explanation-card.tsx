@@ -1,3 +1,4 @@
+// 🔰 推荐解释卡片：内嵌 ProjectCard + AI 推荐理由（事实/推断/建议），内部管理翻页。推荐页使用
 import { useState } from 'react'
 import { ProjectCard } from '@/components/projects/project-card'
 import { ProjectPagination } from '@/components/projects/project-pagination'
@@ -22,19 +23,19 @@ export function RecommendationExplanationCard({ recommendation, projects }: Reco
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-8 xl:grid-cols-2">
         {paginatedProjects.map((project) => {
           const reason = recommendation.reasons[project.repositoryId]
 
           return (
-            <div key={project.repositoryId} className="flex h-full flex-col gap-2">
+            <div key={project.repositoryId} className="flex h-full flex-col gap-8">
               <div className="h-150 overflow-y-auto">
                 <ProjectCard project={project} />
               </div>
               {reason ? (
-                <div className="flex h-70 flex-col overflow-y-auto rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/40">
-                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">推荐理由：</p>
-                  <p className="mt-1 text-sm leading-6 text-emerald-800 whitespace-pre-wrap dark:text-emerald-200">
+                <div className="flex h-70 flex-col overflow-y-auto rounded-2xl border border-brand-ring bg-brand-soft px-4 py-3 dark:border-emerald-800 dark:bg-emerald-950/40">
+                  <p className="text-sm font-medium text-brand-text dark:text-emerald-300">推荐理由：</p>
+                  <p className="mt-1 text-sm leading-6 text-brand-text whitespace-pre-wrap dark:text-emerald-200">
                     {reason}
                   </p>
                 </div>

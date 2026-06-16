@@ -1,3 +1,4 @@
+// 🔰 API 校验 Schema：Zod 定义搜索/采集/推荐请求体验证规则，所有 API 路由共用
 import { z } from 'zod'
 
 export const projectMaturityEnum = z.enum(['early', 'growth', 'mature', 'stalled'])
@@ -38,5 +39,3 @@ export const recommendationRequestSchema = z.object({
   preference: userPreferenceSchema.partial().optional(),
 })
 
-export type SearchProjectsRequest = z.infer<typeof searchProjectsSchema>
-export type GithubStarredSearchRequest = z.infer<typeof githubStarredSearchSchema>

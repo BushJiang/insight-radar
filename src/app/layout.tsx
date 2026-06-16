@@ -1,3 +1,4 @@
+// 🔰 根布局：所有页面共用，设置中文 lang、字体、next-themes 主题、全局 CSS
 import type { Metadata } from "next";
 // 🔰 Tailwind CSS、shadcn/ui 变量、品牌色，所有页面生效
 import "./globals.css";

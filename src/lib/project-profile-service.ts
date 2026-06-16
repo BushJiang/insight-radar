@@ -1,3 +1,4 @@
+// 🔰 项目简介服务：并发生成/重新生成项目 AI 简介（Mastra Agent + deepseek-v4-flash），写入 projects.readme_summary
 import { createHash } from 'crypto'
 import { mastra } from '@/mastra'
 import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, searchProjectsFromDatabase, updateProjectProfile } from '@/lib/projects-repository'
@@ -103,7 +104,7 @@ export async function regenerateProjectProfiles(filters: ProjectSearchFilters, p
 
 async function generateAndSaveProjectProfiles(projects: GithubProject[], preference: UserPreference, force: boolean) {
   const tasks = projects
-    .filter((project) => force || !project.readmeSummary?.trim())
+    .filter((project) => force || !project.projectSummary?.trim())
     .map((project) => async () => {
       try {
         const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
@@ -145,7 +146,7 @@ export function buildProfileHash(project: GithubProject) {
       project.name,
       project.fullName,
       project.description,
-      project.readmeSummary ?? '',
+      project.projectSummary ?? '',
       project.language,
       project.maturity,
       project.sourceGithubUsername,

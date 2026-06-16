@@ -1,3 +1,4 @@
+// 🔰 采集任务状态卡片：展示上次采集结果（来源账号、新增/重复/失败数量、错误信息），项目库页使用
 import { StatusBadge } from '@/components/layout/status-badge'
 import type { CollectionJob } from '@/types/insight-radar'
 

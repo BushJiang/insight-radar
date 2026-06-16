@@ -1,3 +1,4 @@
+// 🔰 TypeScript 类型定义：项目、搜索、推荐、采集、用户偏好等全部接口和类型，全项目共用
 export type CollectionJobStatus = 'pending' | 'running' | 'success' | 'partial_success' | 'failed'
 
 export type ProjectMaturity = 'early' | 'growth' | 'mature' | 'stalled'
@@ -34,7 +35,7 @@ export interface GithubProject {
   deletedAt?: string | null
   notes?: string | null
   pushedAt: string | null
-  readmeSummary: string | null
+  projectSummary: string | null
   readmeContent: string | null
   topics: string[]
   license: string | null
@@ -56,12 +57,6 @@ export interface ProjectSearchFilters {
   maturity: ProjectMaturity[]
   sourceGithubUsername: string | null
   days: number | null
-}
-
-export interface SearchProjectsRequest {
-  filters: ProjectSearchFilters
-  page: number
-  pageSize: number
 }
 
 export interface SearchProjectsResponse {
@@ -111,12 +106,6 @@ export interface ProjectsPageSnapshot {
   items: GithubProject[]
   sourceGithubUsername: string | null
   updatedAt: string | null
-}
-
-export interface GithubStarredSearchRequest {
-  filters: ProjectSearchFilters
-  githubToken?: string
-  maxProjects?: number
 }
 
 export interface GithubStarredSearchResponse {

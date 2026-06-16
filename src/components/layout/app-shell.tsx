@@ -1,6 +1,6 @@
+// 🔰 AppShell 外壳组件：桌面侧边栏导航 + 顶部 header（主题切换）+ 内容区 + 手机底部导航栏，所有 (main) 页面共用
 'use client'
 
-// 🔰 客户端路由组件，点击不刷新页面，只替换内容区
 import Link from 'next/link'
 // 🔰 获取当前 URL 路径，用于高亮导航项
 import { usePathname } from 'next/navigation'
@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={`block rounded-xl px-4 py-3 text-sm transition ${active
-                  ? 'bg-white font-medium text-emerald-700 dark:bg-slate-950 dark:text-emerald-400'
+                  ? 'bg-white font-medium text-brand-text dark:bg-slate-950 dark:text-emerald-400'
                   : 'text-slate-600 hover:bg-emerald-50 hover:text-slate-600 dark:text-slate-300 dark:hover:bg-emerald-950/40 dark:hover:text-slate-300'
                   }`}
               >
@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           const active = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href))
 
           return (
-            <Link key={item.href} href={item.href} className={`px-2 py-3 text-center text-xs transition ${active ? 'bg-white font-medium text-emerald-700 dark:bg-slate-950 dark:text-emerald-400' : 'text-slate-500 hover:bg-emerald-50 hover:text-slate-500 dark:text-slate-400 dark:hover:bg-emerald-950/40 dark:hover:text-slate-400'}`}>
+            <Link key={item.href} href={item.href} className={`px-2 py-3 text-center text-xs transition ${active ? 'bg-white font-medium text-brand-text dark:bg-slate-950 dark:text-emerald-400' : 'text-slate-500 hover:bg-brand-soft hover:text-slate-500 dark:text-slate-400 dark:hover:bg-emerald-950/40 dark:hover:text-slate-400'}`}>
               {item.label}
             </Link>
           )

@@ -1,3 +1,4 @@
+// 🔰 表单状态缓存：内存中暂存项目库和推荐表单的填写内容，页面刷新后恢复（不持久化到磁盘）
 import type { GithubProject, ProjectSearchFilters, RecommendationExplanation } from '@/types/insight-radar'
 
 export type TransientFormState = {
