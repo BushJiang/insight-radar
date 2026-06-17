@@ -2,17 +2,20 @@
 import { ZodError } from 'zod'
 import { GithubApiError, searchGithubStarredProjects } from '@/lib/github-starred'
 import { handleZodError } from '@/lib/api-validation'
+import { normalizePreference } from '@/lib/default-preference'
 import { githubStarredSearchSchema } from '@/validations/api-schemas'
 import type { GithubStarredSearchResponse } from '@/types/insight-radar'
 
 export async function POST(req: Request) {
   try {
     const body = githubStarredSearchSchema.parse(await req.json())
+    const preference = normalizePreference(body.preference)
     // 🔰 通过 GitHub GraphQL API 获取指定账号 Star 的项目，提取 README 并推断成熟度
     const result = await searchGithubStarredProjects({
       filters: body.filters,
       githubToken: body.githubToken,
-      maxProjects: body.maxProjects
+      maxProjects: body.maxProjects,
+      preference,
     })
 
     return Response.json(result)

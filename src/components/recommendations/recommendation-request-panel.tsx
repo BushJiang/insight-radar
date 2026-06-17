@@ -24,9 +24,10 @@ interface RecommendationRequestPanelProps {
   onSubmit: () => void
   onGenerateProfiles: () => void
   onRegenerateProfiles: () => void
+  onClearData: () => void
 }
 
-export function RecommendationRequestPanel({ query, filters, sources, loading = false, recommending = false, profileRunning = false, canGenerateProfiles, recommendationLimit, onQueryChange, onFiltersChange, onRecommendationLimitChange, onSourceInputFocus, onSubmit, onGenerateProfiles, onRegenerateProfiles }: RecommendationRequestPanelProps) {
+export function RecommendationRequestPanel({ query, filters, sources, loading = false, recommending = false, profileRunning = false, canGenerateProfiles, recommendationLimit, onQueryChange, onFiltersChange, onRecommendationLimitChange, onSourceInputFocus, onSubmit, onGenerateProfiles, onRegenerateProfiles, onClearData }: RecommendationRequestPanelProps) {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     onSubmit()
@@ -73,6 +74,9 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
         </Button>
         <Button type="button" disabled={loading || profileRunning} onClick={onRegenerateProfiles} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
           重新生成项目简介
+        </Button>
+        <Button type="button" variant="destructive" disabled={loading || profileRunning} onClick={onClearData} className="active:scale-95">
+          清空数据
         </Button>
       </div>
       <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">

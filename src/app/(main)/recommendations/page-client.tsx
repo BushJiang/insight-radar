@@ -220,6 +220,36 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     }
   }, [filters])
 
+  const handleClearData = useCallback(async () => {
+    if (!window.confirm('确定要清空所有项目数据和向量数据吗？此操作不可恢复。')) {
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/projects/clear', { method: 'POST' })
+      const result = await response.json() as { ok: boolean; error: string | null }
+
+      if (!response.ok || result.error) {
+        setError(result.error || '清空数据失败，请稍后重试。')
+        return
+      }
+
+      setProjects([])
+      setRecommendations([])
+      setSources([])
+      setSourcesLoaded(false)
+      setProgress(initialProgress)
+      writeTransientRecommendationFormState({ projects: [], recommendations: [] })
+    } catch {
+      setError('清空数据失败，请稍后重试。')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   return (
     <main className="space-y-6">
       <section className="space-y-4">
@@ -252,6 +282,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
           onSubmit={() => void handleRecommend()}
           onGenerateProfiles={() => void handleGenerateProfiles()}
           onRegenerateProfiles={() => void handleRegenerateProfiles()}
+          onClearData={() => void handleClearData()}
         />
         <ProjectProfileProgressCard progress={progress} />
         {error ? <ErrorMessage message={error} /> : null}

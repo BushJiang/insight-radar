@@ -1,6 +1,8 @@
 // 🔰 GitHub Star 采集：GraphQL API 分页拉取 Star 仓库 + REST API 取 README + 推断成熟度 + 去重写入 DB
+import { normalizePreference } from '@/lib/default-preference'
+import { generateProjectProfilesForProjects } from '@/lib/project-profile-service'
 import { persistCollectedProjects, searchProjectsFromDatabase } from '@/lib/projects-repository'
-import type { GithubProject, GithubStarredSearchResponse, ProjectMaturity, ProjectSearchFilters } from '@/types/insight-radar'
+import type { GithubProject, GithubStarredSearchResponse, ProjectMaturity, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
 const githubStarredPageSize = 100
 const defaultMaxFetchedRepositories = 500
@@ -84,10 +86,11 @@ interface SearchGithubStarredProjectsOptions {
   filters: ProjectSearchFilters
   githubToken?: string
   maxProjects?: number
+  preference?: Partial<UserPreference>
 }
 
 // 🔰 通过 GitHub GraphQL API 获取指定账号 Star 的项目列表，提取 README 并推断成熟度
-export async function searchGithubStarredProjects({ filters, githubToken, maxProjects }: SearchGithubStarredProjectsOptions): Promise<GithubStarredSearchResponse> {
+export async function searchGithubStarredProjects({ filters, githubToken, maxProjects, preference }: SearchGithubStarredProjectsOptions): Promise<GithubStarredSearchResponse> {
   const username = filters.sourceGithubUsername?.trim()
 
   if (!username) {
@@ -98,6 +101,7 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
   const collectedProjects = await Promise.all(edges.map((edge) => mapRepoEdgeToProject(edge, username, githubToken?.trim())))
   // 🔰 将采集到的项目写入 PostgreSQL，已存在的更新元数据
   const persistedResult = await persistCollectedProjects(collectedProjects)
+  await generateProfilesForCollectedProjects(collectedProjects, preference)
   const projects = filters.query.trim()
     ? (await searchProjectsFromDatabase({
       query: filters.query,
@@ -121,6 +125,18 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
     rateLimitRemaining: null,
     rateLimitResetAt: null,
     error: null,
+  }
+}
+
+async function generateProfilesForCollectedProjects(projects: GithubProject[], preference: Partial<UserPreference> | undefined) {
+  if (projects.length === 0) {
+    return
+  }
+
+  try {
+    await generateProjectProfilesForProjects(projects, normalizePreference(preference))
+  } catch (error) {
+    console.error('[github-starred] 采集后项目简介生成失败:', error instanceof Error ? error.message : String(error))
   }
 }
 

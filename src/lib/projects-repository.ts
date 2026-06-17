@@ -172,6 +172,11 @@ export async function updateProjectProfile(repositoryId: string, profile: string
   await db.update(projects).set({ projectSummary: profile, updatedAt: new Date() }).where(eq(projects.repositoryId, repositoryId))
 }
 
+export async function clearAllProjects() {
+  const db = getDb()
+  await db.delete(projects)
+}
+
 // 🔰 推荐用的项目列表查询：筛选条件 + 按 stars 降序排列
 export async function listProjectsForRecommendation(filters: { query: string; languages: string[]; maturity: ProjectMaturity[]; sourceGithubUsername: string | null; days: number | null; limit: number }) {
   const db = getDb()

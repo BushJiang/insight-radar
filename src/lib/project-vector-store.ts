@@ -82,6 +82,19 @@ export async function searchProjectProfileVectors({ query, filters, limit }: Pro
   }
 }
 
+export async function clearProjectProfileVectors() {
+  if (!process.env.MILVUS_ADDRESS) {
+    return
+  }
+
+  const client = await getMilvusClient()
+  const existingCollection = await client.hasCollection({ collection_name: collectionName })
+
+  if (existingCollection.value) {
+    await client.dropCollection({ collection_name: collectionName })
+  }
+}
+
 export function buildMilvusFilter(filters: ProjectSearchFilters) {
   const conditions: string[] = []
 

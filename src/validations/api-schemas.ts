@@ -17,12 +17,6 @@ export const searchProjectsSchema = z.object({
   pageSize: z.number().int().min(1).max(100).default(20),
 })
 
-export const githubStarredSearchSchema = z.object({
-  filters: projectSearchFiltersSchema,
-  githubToken: z.string().optional(),
-  maxProjects: z.number().int().min(0).optional(),
-})
-
 export const userPreferenceSchema = z.object({
   id: z.string(),
   domains: z.array(z.string()).default([]),
@@ -30,6 +24,13 @@ export const userPreferenceSchema = z.object({
   projectProfileAgentPrompt: z.string().default(''),
   candidateProjectCount: z.number().int().min(1).max(50).default(4),
   updatedAt: z.string(),
+})
+
+export const githubStarredSearchSchema = z.object({
+  filters: projectSearchFiltersSchema,
+  githubToken: z.string().optional(),
+  maxProjects: z.number().int().min(0).optional(),
+  preference: userPreferenceSchema.partial().optional(),
 })
 
 export const recommendationRequestSchema = z.object({

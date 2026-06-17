@@ -32,10 +32,9 @@ export async function ensureProjectProfiles(filters: ProjectSearchFilters, prefe
     limit: Math.min(maxGeneratedProfilesPerRequest, totalMissingCount),
   })
 
-  await generateAndSaveProjectProfiles(projects, preference, false)
-
+  const savedProjects = await generateAndSaveProjectProfiles(projects, preference, false)
   const remainingCount = await countProjectsMissingProfiles(filters)
-  const completedCount = Math.max(0, totalMissingCount - remainingCount)
+  const completedCount = Math.max(0, totalMissingCount - remainingCount, savedProjects.length)
 
   return {
     status: remainingCount === 0 ? 'ready' : 'running',
@@ -48,6 +47,30 @@ export async function ensureProjectProfiles(filters: ProjectSearchFilters, prefe
 // 🔰 生成缺失的项目简介（ensureProjectProfiles 的别名，给 API 路由直接调用）
 export async function generateMissingProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
   return ensureProjectProfiles(filters, preference)
+}
+
+export async function generateProjectProfilesForProjects(projects: GithubProject[], preference: UserPreference): Promise<ProjectProfileProgress> {
+  const projectsMissingProfiles = projects.filter((project) => !project.projectSummary?.trim())
+
+  if (projectsMissingProfiles.length === 0) {
+    return {
+      status: 'ready',
+      completedCount: 0,
+      totalCount: 0,
+      message: null,
+    }
+  }
+
+  const savedProjects = await generateAndSaveProjectProfiles(projectsMissingProfiles, preference, false)
+  const completedCount = savedProjects.length
+  const isReady = completedCount === projectsMissingProfiles.length
+
+  return {
+    status: isReady ? 'ready' : 'failed',
+    completedCount,
+    totalCount: projectsMissingProfiles.length,
+    message: isReady ? null : '部分项目简介生成失败',
+  }
 }
 
 // 🔰 重新生成已有简介的项目（用于「重新生成项目简介」按钮），支持增量处理跳过已生成的
@@ -130,6 +153,8 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
   } catch (error) {
     console.error('[project-profile] 项目简介向量入库失败:', error instanceof Error ? error.message : String(error))
   }
+
+  return savedProjects
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
