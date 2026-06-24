@@ -1,4 +1,4 @@
-// 🔰 POST /api/chat — Mastra AI 聊天流式接口，返回 SSE 流
+// POST /api/chat — Mastra AI 聊天流式接口，返回 SSE 流
 import { handleChatStream } from '@mastra/ai-sdk'
 import { createUIMessageStreamResponse } from 'ai'
 import { mastra } from '@/mastra'

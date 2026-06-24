@@ -1,4 +1,4 @@
-// 🔰 状态标签徽章：根据 variant（采集状态/置信度）自动变色，用于首页来源账号和采集任务状态展示
+// 状态标签徽章：根据 variant（采集状态/置信度）自动变色，用于首页来源账号和采集任务状态展示
 import type { CollectionJobStatus, RecommendationConfidence } from '@/types/insight-radar'
 
 type StatusBadgeVariant = CollectionJobStatus | RecommendationConfidence | 'brand'
@@ -32,7 +32,7 @@ interface StatusBadgeProps {
   label?: string
 }
 
-// 🔰 状态标签徽章，根据 variant 自动变色（success=绿、failed=红、pending=黄）
+// 状态标签徽章，根据 variant 自动变色（success=绿、failed=红、pending=黄）
 export function StatusBadge({ variant, label }: StatusBadgeProps) {
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${statusClassNames[variant]}`}>

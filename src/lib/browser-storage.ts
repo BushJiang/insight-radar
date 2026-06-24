@@ -1,4 +1,4 @@
-// 🔰 浏览器 localStorage 读写 Hook：useBrowserStorage 用 useSyncExternalStore 实现跨标签页同步，支持函数式更新
+// 浏览器 localStorage 读写 Hook：useBrowserStorage 用 useSyncExternalStore 实现跨标签页同步，支持函数式更新
 import { useCallback, useSyncExternalStore } from 'react'
 
 const browserStorageEventName = 'insight-radar-browser-storage'

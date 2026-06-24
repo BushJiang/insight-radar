@@ -1,4 +1,4 @@
-// 🔰 主题切换按钮：点击在 dark/light 间切换，显示 🌙/☀️ 图标。AppShell header 中使用
+// 主题切换按钮：点击在 dark/light 间切换，显示 🌙/☀️ 图标。AppShell header 中使用
 'use client'
 
 import { useTheme } from 'next-themes'

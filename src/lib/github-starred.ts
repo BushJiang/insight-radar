@@ -1,7 +1,8 @@
-// 🔰 GitHub Star 采集：GraphQL API 分页拉取 Star 仓库 + REST API 取 README + 推断成熟度 + 去重写入 DB
+// GitHub Star 采集：GraphQL API 分页拉取 Star 仓库 + REST API 取 README + 推断成熟度 + 去重写入 DB
 import { normalizePreference } from '@/lib/default-preference'
-import { generateProjectProfilesForProjects } from '@/lib/project-profile-service'
+import { generateAndSaveMissingProjectProfiles } from '@/lib/project-profile-service'
 import { persistCollectedProjects, searchProjectsFromDatabase } from '@/lib/projects-repository'
+import { stripHtml } from '@/lib/utils'
 import type { GithubProject, GithubStarredSearchResponse, ProjectMaturity, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
 const githubStarredPageSize = 100
@@ -89,7 +90,7 @@ interface SearchGithubStarredProjectsOptions {
   preference?: Partial<UserPreference>
 }
 
-// 🔰 通过 GitHub GraphQL API 获取指定账号 Star 的项目列表，提取 README 并推断成熟度
+// 通过 GitHub GraphQL API 获取指定账号 Star 的项目列表，提取 README 并推断成熟度
 export async function searchGithubStarredProjects({ filters, githubToken, maxProjects, preference }: SearchGithubStarredProjectsOptions): Promise<GithubStarredSearchResponse> {
   const username = filters.sourceGithubUsername?.trim()
 
@@ -98,10 +99,13 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
   }
 
   const { edges, totalCount } = await fetchStarredReposViaGraphql(username, filters.days, maxProjects ?? defaultMaxFetchedRepositories, githubToken?.trim())
+  console.log(`[github-starred] ✅ 采集到 ${edges.length} 个项目信息`)
   const collectedProjects = await Promise.all(edges.map((edge) => mapRepoEdgeToProject(edge, username, githubToken?.trim())))
-  // 🔰 将采集到的项目写入 PostgreSQL，已存在的更新元数据
+  console.log(`[github-starred] 📄 正在将 ${collectedProjects.length} 个项目写入数据库...`)
   const persistedResult = await persistCollectedProjects(collectedProjects)
-  await generateProfilesForCollectedProjects(collectedProjects, preference)
+  console.log(`[github-starred] 💾 数据库写入完成 (新增 ${persistedResult.createdProjects.length}, 更新 ${persistedResult.updatedDuplicateCount}, 未变 ${persistedResult.unchangedDuplicateCount})`)
+  console.log(`[github-starred] 🤖 正在生成项目简介...`)
+  await generateProfilesAfterCollection(collectedProjects, preference)
   const projects = filters.query.trim()
     ? (await searchProjectsFromDatabase({
       query: filters.query,
@@ -128,13 +132,13 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
   }
 }
 
-async function generateProfilesForCollectedProjects(projects: GithubProject[], preference: Partial<UserPreference> | undefined) {
+async function generateProfilesAfterCollection(projects: GithubProject[], preference: Partial<UserPreference> | undefined) {
   if (projects.length === 0) {
     return
   }
 
   try {
-    await generateProjectProfilesForProjects(projects, normalizePreference(preference))
+    await generateAndSaveMissingProjectProfiles(projects, normalizePreference(preference))
   } catch (error) {
     console.error('[github-starred] 采集后项目简介生成失败:', error instanceof Error ? error.message : String(error))
   }
@@ -245,7 +249,9 @@ async function fetchReadmeViaApi(fullName: string, githubToken?: string) {
     return null
   }
 
-  return response.text()
+  const rawReadme = await response.text()
+
+  return stripHtml(rawReadme)
 }
 
 function buildGraphqlHeaders(githubToken?: string) {
@@ -271,7 +277,7 @@ async function buildGithubError(response: Response) {
   return new GithubApiError(`GitHub API 请求失败，状态码：${response.status}。`, response.status)
 }
 
-// 🔰 根据 Stars 数和最近推送时间推断项目成熟度（early/growth/mature/stalled）
+// 根据 Stars 数和最近推送时间推断项目成熟度（early/growth/mature/stalled）
 function inferMaturity(stars: number, pushedAt: string): ProjectMaturity {
   const inactiveDays = (Date.now() - new Date(pushedAt).getTime()) / 86_400_000
 

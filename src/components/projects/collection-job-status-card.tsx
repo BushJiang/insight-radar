@@ -1,4 +1,4 @@
-// 🔰 采集任务状态卡片：展示上次采集结果（来源账号、新增/重复/失败数量、错误信息），项目库页使用
+// 采集任务状态卡片：展示上次采集结果（来源账号、新增/重复/失败数量、错误信息），项目库页使用
 import { StatusBadge } from '@/components/layout/status-badge'
 import type { CollectionJob } from '@/types/insight-radar'
 
@@ -6,7 +6,7 @@ interface CollectionJobStatusCardProps {
   job: CollectionJob
 }
 
-// 🔰 采集任务状态卡片，展示最后一次采集的结果（来源账号、新增/重复/失败数量）
+// 采集任务状态卡片，展示最后一次采集的结果（来源账号、新增/重复/失败数量）
 export function CollectionJobStatusCard({ job }: CollectionJobStatusCardProps) {
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

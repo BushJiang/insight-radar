@@ -1,4 +1,4 @@
-// 🔰 项目卡片：展示项目名、描述、Stars、成熟度、AI 简介，点击跳转详情页。首页/搜索/推荐/项目库复用
+// 项目卡片：展示项目名、描述、Stars、成熟度、AI 简介，点击跳转详情页。首页/搜索/推荐/项目库复用
 import Link from 'next/link'
 import type { GithubProject, ProjectMaturity } from '@/types/insight-radar'
 
@@ -13,10 +13,9 @@ const maturityLabels: Record<ProjectMaturity, string> = {
   stalled: '停滞',
 }
 
-// 🔰 项目卡片组件，展示项目摘要信息（名称、描述、Stars等），点击跳转详情页
+// 项目卡片组件，展示项目摘要信息（名称、描述、Stars等），点击跳转详情页
 export function ProjectCard({ project }: ProjectCardProps) {
   const watchedAccounts = formatWatchedAccounts([project.sourceGithubUsername])
-  const visibleTopics = project.topics.slice(0, 5)
 
   return (
     <article className="group relative flex h-full flex-col rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-ring hover:bg-brand-soft hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-emerald-800 dark:hover:bg-emerald-950/40">

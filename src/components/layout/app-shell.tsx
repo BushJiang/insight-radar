@@ -1,14 +1,14 @@
-// 🔰 AppShell 外壳组件：桌面侧边栏导航 + 顶部 header（主题切换）+ 内容区 + 手机底部导航栏，所有 (main) 页面共用
+// AppShell 外壳组件：桌面侧边栏导航 + 顶部 header（主题切换）+ 内容区 + 手机底部导航栏，所有 (main) 页面共用
 'use client'
 
 import Link from 'next/link'
-// 🔰 获取当前 URL 路径，用于高亮导航项
+// 获取当前 URL 路径，用于高亮导航项
 import { usePathname } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { Container } from '@/components/shared/container'
 import { ThemeToggle } from '@/components/shared/theme-toggle'
 
-// 🔰 导航项在桌面侧边栏和手机底部导航两处复用，只定义一次
+// 导航项在桌面侧边栏和手机底部导航两处复用，只定义一次
 const navigationItems = [
   { href: '/', label: '首页' },
   { href: '/projects', label: '创建项目库' },
@@ -17,9 +17,9 @@ const navigationItems = [
   { href: '/settings', label: '用户设置' },
 ]
 
-// 🔰 外壳组件：侧边栏 + header + 内容区 + 手机导航。children 由 layout.tsx 传入
+// 外壳组件：侧边栏 + header + 内容区 + 手机导航。children 由 layout.tsx 传入
 export function AppShell({ children }: { children: ReactNode }) {
-  // 🔰 当前路由路径，用于高亮导航项
+  // 当前路由路径，用于高亮导航项
   const currentPath = usePathname()
 
   return (

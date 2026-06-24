@@ -1,4 +1,4 @@
-// 🔰 shadcn/ui Button 基础组件：支持 variant/size/asChild，所有页面通用
+// shadcn/ui Button 基础组件：支持 variant/size/asChild，所有页面通用
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"

@@ -1,4 +1,4 @@
-// 🔰 数据库连接：Drizzle ORM + postgres.js 单例连接，通过 DATABASE_URL 环境变量配置
+// 数据库连接：Drizzle ORM + postgres.js 单例连接，通过 DATABASE_URL 环境变量配置
 import { drizzle } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from '@/lib/db/schema'
@@ -9,7 +9,7 @@ export function getDb() {
   const connectionString = process.env.DATABASE_URL
 
   if (!connectionString) {
-    throw new Error('缺少 DATABASE_URL 环境变量，请在 .env.local 中配置本地 PostgreSQL 连接。')
+    throw new Error('缺少 DATABASE_URL 环境变量，请在 .env 中配置本地 PostgreSQL 连接。')
   }
 
   if (!database) {

@@ -1,4 +1,4 @@
-// 🔰 智能推荐页客户端组件：管理推荐表单状态、简介生成轮询、AI 推荐请求，表单状态存模块内存（transient-form-state）
+// 智能推荐页客户端组件：管理推荐表单状态、AI 推荐请求，表单状态存模块内存（transient-form-state）
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
@@ -9,66 +9,66 @@ import { ErrorMessage } from '@/components/shared/error-message'
 import { getDefaultPreference, normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
 import { readBrowserStorage } from '@/lib/browser-storage'
 import { readTransientFormState, writeTransientRecommendationFormState } from '@/lib/transient-form-state'
-import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, RecommendationExplanation, SearchProjectsResponse } from '@/types/insight-radar'
+import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, RecommendationExplanation, SearchProjectsResponse, VectorIndexStatus } from '@/types/insight-radar'
 
 interface RecommendationsPageClientProps {
   initialProjects: GithubProject[]
 }
 
-// 🔰 项目简介生成进度的初始值（未开始状态）
-const initialProgress: ProjectProfileProgress = {
-  status: 'ready',
-  completedCount: 0,
-  totalCount: 0,
-  message: null,
-}
-
 export default function RecommendationsPageClient({ initialProjects }: RecommendationsPageClientProps) {
-  // 🔰 从 transient-form-state 恢复上次的表单状态，SPA 路由跳转不丢失，但刷新页面后重置为默认值
   const recommendationDraft = readTransientFormState().recommendations
-  // 🔰 用户输入的表单状态（推荐数量、筛选条件、需求描述、推荐结果）
   const [recommendationLimit, setRecommendationLimit] = useState(recommendationDraft.recommendationLimit)
   const [filters, setFilters] = useState(recommendationDraft.filters)
   const [query, setQuery] = useState(recommendationDraft.query)
   const [recommendations, setRecommendations] = useState<RecommendationExplanation[]>(recommendationDraft.recommendations)
   const [projects, setProjects] = useState(recommendationDraft.projects.length > 0 ? recommendationDraft.projects : initialProjects)
-  // 🔰 来源账号列表，用于筛选下拉框的选项
-  const [sources, setSources] = useState<string[]>([])
-  const [sourcesLoaded, setSourcesLoaded] = useState(false)
-  // 🔰 项目简介生成进度（总数、已完成数、状态）
-  const [progress, setProgress] = useState<ProjectProfileProgress>(initialProgress)
+  const [sources, setSources] = useState<string[]>(() => mergeSelectedSource(recommendationDraft.sources, recommendationDraft.filters.sourceGithubUsername))
+  const [sourcesLoaded, setSourcesLoaded] = useState(recommendationDraft.sourcesLoaded)
   const [loading, setLoading] = useState(false)
   const [recommending, setRecommending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // 🔰 还有项目没生成简介时，显示「生成项目简介」按钮
-  const canGenerateProfiles = progress.totalCount > progress.completedCount
+  // 向量索引状态优先从缓存读取，切页不重查 API
+  const [vectorStatus, setVectorStatus] = useState<VectorIndexStatus>(recommendationDraft.vectorStatus)
+  const [vectorStatusLoaded, setVectorStatusLoaded] = useState(recommendationDraft.vectorStatusLoaded)
+  const [syncingIndex, setSyncingIndex] = useState(false)
 
-  // 🔰 进入页面或筛选条件变化时，自动查询项目简介生成进度
+  // 只在三种情况下查询向量索引状态：
+  // 1. 首次访问（无缓存）
+  // 2. 筛选条件变化（统计范围变了）
+  // 3. 点击「更新数据库」后（handleSyncIndex 直接更新 state，不依赖此 effect）
+  // 切页来回时筛选条件未变且缓存有效 → 跳过查询，直接展示缓存数据
   useEffect(() => {
-    let cancelled = false
-    // 查询项目简介的生成进度
-    async function loadProfileStatus() {
-      try {
-        const result = await requestProjectProfiles('status', filters, [])
+    // 筛选条件未变且已有缓存 → 跳过，不显示加载中
+    if (vectorStatusLoaded && recommendationDraft.vectorStatusFilters && isSameFilters(recommendationDraft.vectorStatusFilters, filters)) {
+      return
+    }
 
+    let cancelled = false
+
+    async function loadVectorStatus() {
+      try {
+        const result = await requestVectorStatus(filters)
         if (!cancelled) {
-          setProgress(result.progress)
+          const nextStatus = result.vectorStatus ?? { indexedCount: 0, unindexedCount: 0, lastSyncAt: null }
+          setVectorStatus(nextStatus)
+          setVectorStatusLoaded(true)
+          writeTransientRecommendationFormState({ vectorStatus: nextStatus, vectorStatusLoaded: true, vectorStatusFilters: { ...filters } })
         }
       } catch {
         if (!cancelled) {
-          setProgress(initialProgress)
+          setVectorStatusLoaded(true)
+          writeTransientRecommendationFormState({ vectorStatusLoaded: true, vectorStatusFilters: { ...filters } })
         }
       }
     }
 
-    void loadProfileStatus()
+    void loadVectorStatus()
 
     return () => {
       cancelled = true
     }
   }, [filters])
 
-  // 🔰 首次点击来源下拉框时，发送空搜索获取所有来源账号列表
   async function ensureSourcesLoaded() {
     if (sourcesLoaded) {
       return
@@ -92,14 +92,22 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
       })
       const result = await response.json() as SearchProjectsResponse
 
-      setSources(result.sources)
+      if (!response.ok || result.error) {
+        setSourcesLoaded(true)
+        writeTransientRecommendationFormState({ sourcesLoaded: true })
+        return
+      }
+
+      const nextSources = mergeSelectedSource(result.sources, filters.sourceGithubUsername)
+      setSources(nextSources)
       setSourcesLoaded(true)
+      writeTransientRecommendationFormState({ sources: nextSources, sourcesLoaded: true })
     } catch {
       setSourcesLoaded(true)
+      writeTransientRecommendationFormState({ sourcesLoaded: true })
     }
   }
 
-  // 🔰 点「智能推荐」按钮：调 API 获取 AI 推荐结果
   const handleRecommend = useCallback(async () => {
     setLoading(true)
     setRecommending(true)
@@ -118,14 +126,13 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
       })
       const result = await response.json() as { progress: ProjectProfileProgress; recommendation: RecommendationExplanation | null; projects: GithubProject[]; error: string | null }
 
-      setProgress(result.progress)
       if (!response.ok || result.error) {
         setError(result.error || '智能推荐失败，请稍后重试。')
         return
       }
 
       if (result.progress.status !== 'ready') {
-        setError('请先生成项目简介，再执行智能推荐。')
+        setError('请先更新数据库，再执行智能推荐。')
         return
       }
 
@@ -146,80 +153,6 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     }
   }, [filters, query, recommendationLimit])
 
-  // 🔰 点「生成项目简介」按钮：轮询调用 API，每 500ms 检查一次进度，直到全部完成
-  const handleGenerateProfiles = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    setProgress({ status: 'running', completedCount: 0, totalCount: 1, message: '正在准备生成项目简介' })
-
-    try {
-      let stableProgress = initialProgress
-
-      while (true) {
-        const result = await requestProjectProfiles('generate', filters, [])
-        stableProgress = resolveStableProgress(stableProgress, result.progress)
-
-        setProgress(stableProgress)
-        if (result.error) {
-          setError(result.error)
-          return
-        }
-
-        if (result.progress.status !== 'running') {
-          return
-        }
-        // 🔰 轮询间延迟 500ms，避免空转浪费服务器资源
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      }
-    } catch {
-      setError('生成过程中网络异常，已生成的项目简介已保存。可重新点击按钮继续。')
-    } finally {
-      setLoading(false)
-    }
-  }, [filters])
-
-  // 🔰 点「重新生成项目简介」按钮：和生成类似，但会重新生成已有简介的项目
-  const handleRegenerateProfiles = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    // 🔰 立即显示进度条，避免 AI 生成期间（10-30s）UI 无反馈
-    setProgress({ status: 'running', completedCount: 0, totalCount: 1, message: '正在准备重新生成项目简介' })
-
-    try {
-      let processedRepositoryIds: string[] = []
-
-      while (true) {
-        const result = await requestProjectProfiles('regenerate', filters, processedRepositoryIds)
-        processedRepositoryIds = result.processedRepositoryIds
-
-        setProgress(result.progress)
-        if (result.error) {
-          setError(result.error)
-          return
-        }
-
-        if (result.progress.status === 'ready') {
-          setProgress(result.progress)
-          // 🔰 API 在再生完成时直接返回最新项目数据，无需额外请求
-          if (result.projects.length > 0) {
-            setProjects(result.projects)
-            writeTransientRecommendationFormState({ projects: result.projects })
-          }
-          return
-        }
-
-        if (result.progress.status !== 'running') {
-          return
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      }
-    } catch {
-      setError('重新生成过程中网络异常，已生成的项目简介已保存。可重新点击按钮继续。')
-    } finally {
-      setLoading(false)
-    }
-  }, [filters])
-
   const handleClearData = useCallback(async () => {
     if (!window.confirm('确定要清空所有项目数据和向量数据吗？此操作不可恢复。')) {
       return
@@ -233,7 +166,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
       const result = await response.json() as { ok: boolean; error: string | null }
 
       if (!response.ok || result.error) {
-        setError(result.error || '清空数据失败，请稍后重试。')
+        setError(result.error || '清空数据库失败，请稍后重试。')
         return
       }
 
@@ -241,14 +174,35 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
       setRecommendations([])
       setSources([])
       setSourcesLoaded(false)
-      setProgress(initialProgress)
-      writeTransientRecommendationFormState({ projects: [], recommendations: [] })
+      setVectorStatus({ indexedCount: 0, unindexedCount: 0, lastSyncAt: null })
+      setVectorStatusLoaded(false)
+      writeTransientRecommendationFormState({ projects: [], recommendations: [], sources: [], sourcesLoaded: false, vectorStatus: { indexedCount: 0, unindexedCount: 0, lastSyncAt: null }, vectorStatusLoaded: false, vectorStatusFilters: null })
     } catch {
-      setError('清空数据失败，请稍后重试。')
+      setError('清空数据库失败，请稍后重试。')
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const handleSyncIndex = useCallback(async () => {
+    setSyncingIndex(true)
+    setError(null)
+
+    try {
+      const result = await requestSyncVectors(filters)
+      const nextStatus = result.vectorStatus ?? { indexedCount: 0, unindexedCount: 0, lastSyncAt: null }
+      setVectorStatus(nextStatus)
+      writeTransientRecommendationFormState({ vectorStatus: nextStatus, vectorStatusFilters: { ...filters } })
+
+      if (result.error) {
+        setError(result.error)
+      }
+    } catch {
+      setError('更新数据库失败，请稍后重试。')
+    } finally {
+      setSyncingIndex(false)
+    }
+  }, [filters])
 
   return (
     <main className="space-y-6">
@@ -259,20 +213,22 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
         <RecommendationRequestPanel
           query={query}
           filters={filters}
-          sources={sources}
+          sources={mergeSelectedSource(sources, filters.sourceGithubUsername)}
           loading={loading}
           recommending={recommending}
-          profileRunning={loading && !recommending}
-          canGenerateProfiles={canGenerateProfiles}
           recommendationLimit={recommendationLimit}
           onQueryChange={(nextQuery) => {
             setQuery(nextQuery)
             writeTransientRecommendationFormState({ query: nextQuery })
           }}
           onFiltersChange={(nextFilters) => {
-            const resolvedFilters = { ...filters, ...nextFilters }
-            setFilters(resolvedFilters)
-            writeTransientRecommendationFormState({ filters: resolvedFilters })
+            setFilters((prev) => {
+              const resolvedFilters = { ...prev, ...nextFilters }
+              const nextSources = mergeSelectedSource(sources, resolvedFilters.sourceGithubUsername)
+              setSources(nextSources)
+              writeTransientRecommendationFormState({ filters: resolvedFilters, sources: nextSources })
+              return resolvedFilters
+            })
           }}
           onRecommendationLimitChange={(limit) => {
             setRecommendationLimit(limit)
@@ -280,11 +236,12 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
           }}
           onSourceInputFocus={ensureSourcesLoaded}
           onSubmit={() => void handleRecommend()}
-          onGenerateProfiles={() => void handleGenerateProfiles()}
-          onRegenerateProfiles={() => void handleRegenerateProfiles()}
+          onSyncIndex={() => void handleSyncIndex()}
           onClearData={() => void handleClearData()}
+          syncingIndex={syncingIndex}
+          canSyncIndex={vectorStatus.unindexedCount > 0}
         />
-        <ProjectProfileProgressCard progress={progress} />
+        <VectorIndexStatusCard vectorStatus={vectorStatus} loaded={vectorStatusLoaded} />
         {error ? <ErrorMessage message={error} /> : null}
       </section>
 
@@ -302,67 +259,89 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   )
 }
 
-// 🔰 调用 /api/project-profiles 接口。action='status' 查询进度，'generate' 生成简介，'regenerate' 重新生成
-async function requestProjectProfiles(action: 'status' | 'generate' | 'regenerate', filters: ProjectSearchFilters, processedRepositoryIds: string[]) {
+async function requestVectorStatus(filters: ProjectSearchFilters) {
+  const response = await fetch('/api/project-profiles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'vector-status', filters }),
+  })
+  return await response.json() as { vectorStatus?: VectorIndexStatus; error: string | null }
+}
+
+async function requestSyncVectors(filters: ProjectSearchFilters) {
   const response = await fetch('/api/project-profiles', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      action,
+      action: 'sync-vectors',
       filters,
       preference: normalizePreference(readBrowserStorage(preferenceStorageKey, getDefaultPreference())),
-      processedRepositoryIds,
     }),
   })
-  const result = await response.json() as { progress: ProjectProfileProgress; processedRepositoryIds: string[]; projects: GithubProject[]; error: string | null }
-
-  if (!response.ok && !result.error) {
-    return { ...result, error: '项目简介生成失败，请稍后重试。' }
-  }
-
-  return result
+  return await response.json() as { vectorStatus?: VectorIndexStatus; syncedCount?: number; error: string | null }
 }
 
-// 🔰 合并轮询中两次返回的进度数据。AI 生成是分批的，每次只返回新完成的，需要累加到上一次进度上
-function resolveStableProgress(currentProgress: ProjectProfileProgress, nextProgress: ProjectProfileProgress): ProjectProfileProgress {
-  if (nextProgress.status === 'ready') {
-    return currentProgress.totalCount > 0
-      ? { ...nextProgress, completedCount: currentProgress.totalCount, totalCount: currentProgress.totalCount }
-      : nextProgress
-  }
+// 比较两个筛选条件是否相同，用于判断向量索引状态是否需要重新查询
+function isSameFilters(left: ProjectSearchFilters | null, right: ProjectSearchFilters): boolean {
+  if (!left) return false
 
-  if (nextProgress.status !== 'running') {
-    return nextProgress
-  }
-
-  const totalCount = Math.max(currentProgress.totalCount, nextProgress.totalCount)
-  const previouslyCompletedCount = Math.max(0, currentProgress.totalCount - nextProgress.totalCount)
-  const completedCount = Math.max(currentProgress.completedCount, previouslyCompletedCount + nextProgress.completedCount)
-
-  return {
-    ...nextProgress,
-    completedCount: Math.min(completedCount, totalCount),
-    totalCount,
-  }
+  return left.query === right.query
+    && left.sourceGithubUsername === right.sourceGithubUsername
+    && left.days === right.days
+    && arraysEqual(left.languages, right.languages)
+    && arraysEqual(left.maturity, right.maturity)
 }
 
-// 🔰 项目简介生成进度条组件。显示完成数/总数 + 百分比进度条。全部完成时自动隐藏
-function ProjectProfileProgressCard({ progress }: { progress: ProjectProfileProgress }) {
-  if (progress.status === 'ready' && progress.totalCount === 0) {
+function arraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+
+  return left.every((item) => right.includes(item))
+}
+
+function mergeSelectedSource(sources: string[], selectedSource: string | null) {
+  if (!selectedSource || sources.includes(selectedSource)) {
+    return sources
+  }
+
+  return [selectedSource, ...sources]
+}
+
+// 推荐索引状态卡片：显示最后同步时间和未索引项目警告。加载完成前显示占位卡片，避免前后出现/消失的跳动感
+function VectorIndexStatusCard({ vectorStatus, loaded }: { vectorStatus: VectorIndexStatus; loaded: boolean }) {
+  if (!loaded) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">数据库状态</span>
+        </div>
+        <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">加载中...</p>
+      </div>
+    )
+  }
+
+  if (vectorStatus.indexedCount === 0 && vectorStatus.unindexedCount === 0) {
     return null
   }
 
-  const percent = progress.totalCount > 0 ? Math.round((progress.completedCount / progress.totalCount) * 100) : 0
-
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{progress.message || '项目简介已准备完成'}</p>
-        <p className="text-sm tabular-nums text-slate-500 dark:text-slate-400">{progress.completedCount}/{progress.totalCount}</p>
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">数据库状态</span>
+        {vectorStatus.lastSyncAt ? (
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            最后更新：{new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(vectorStatus.lastSyncAt))}
+          </span>
+        ) : (
+          <span className="text-sm text-slate-400 dark:text-slate-500">尚未更新</span>
+        )}
       </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-        <div className="h-full rounded-full bg-brand-primary transition-all" style={{ width: `${percent}%` }} />
-      </div>
+      {vectorStatus.unindexedCount > 0 ? (
+        <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
+          有 {vectorStatus.unindexedCount} 个项目未更新，推荐结果可能不完整
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">所有项目已更新</p>
+      )}
     </div>
   )
 }

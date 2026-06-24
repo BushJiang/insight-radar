@@ -1,4 +1,4 @@
-// 🔰 首页加载骨架屏：数据加载中展示灰色脉冲动画占位
+// HomeLoading 是首页的加载骨架屏，首页数据未就绪时 Next.js 自动渲染它
 export default function HomeLoading() {
   return (
     <div className="space-y-6">

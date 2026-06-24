@@ -1,4 +1,4 @@
-// 🔰 加载提示：数据请求中的灰底文字提示框。搜索页使用
+// 加载提示：数据请求中的灰底文字提示框。搜索页使用
 interface LoadingMessageProps {
   message?: string
 }

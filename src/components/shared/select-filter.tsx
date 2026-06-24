@@ -1,4 +1,4 @@
-// 🔰 下拉筛选器：封装 shadcn Select，支持「全部」选项和自定义标签映射。搜索栏和推荐面板的筛选区使用
+// 下拉筛选器：封装 shadcn Select，支持「全部」选项和自定义标签映射。搜索栏和推荐面板的筛选区使用
 'use client'
 
 import type { ProjectMaturity } from '@/types/insight-radar'

@@ -1,8 +1,9 @@
-// 🔰 项目简介服务：并发生成/重新生成项目 AI 简介（Mastra Agent + deepseek-v4-flash），写入 projects.readme_summary
+// 项目简介服务：并发生成/重新生成项目 AI 简介（Mastra Agent + deepseek-v4-flash），写入 projects.readme_summary
 import { mastra } from '@/mastra'
-import { upsertProjectProfileVectors } from '@/lib/project-vector-store'
+import { getAllVectorRepositoryIds, getLastIndexedAt, upsertProjectProfileVectors } from '@/lib/project-vector-store'
 import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, searchProjectsFromDatabase, updateProjectProfile } from '@/lib/projects-repository'
-import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
+import { stripHtml } from '@/lib/utils'
+import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference, VectorIndexStatus } from '@/types/insight-radar'
 
 // 项目简介最终截断上限（字符数），DB 字段 readme_summary 为 varchar(300)
 const projectProfileMaxLength = 280
@@ -14,7 +15,7 @@ const aiGenerateTimeoutMs = 30_000
 const aiGenerateConcurrency = 10
 const vectorUpsertTimeoutMs = Number(process.env.PROJECT_PROFILE_VECTOR_UPSERT_TIMEOUT_MS || 30_000)
 
-// 🔰 检查并生成缺失的项目简介（推荐前自动调用）。一次最多生成 20 个
+// 检查并生成缺失的项目简介（推荐前自动调用）。一次最多生成 20 个
 export async function ensureProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
   const totalMissingCount = await countProjectsMissingProfiles(filters)
 
@@ -44,12 +45,12 @@ export async function ensureProjectProfiles(filters: ProjectSearchFilters, prefe
   }
 }
 
-// 🔰 生成缺失的项目简介（ensureProjectProfiles 的别名，给 API 路由直接调用）
+// 生成缺失的项目简介（ensureProjectProfiles 的别名，给 API 路由直接调用）
 export async function generateMissingProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
   return ensureProjectProfiles(filters, preference)
 }
 
-export async function generateProjectProfilesForProjects(projects: GithubProject[], preference: UserPreference): Promise<ProjectProfileProgress> {
+export async function generateAndSaveMissingProjectProfiles(projects: GithubProject[], preference: UserPreference): Promise<ProjectProfileProgress> {
   const projectsMissingProfiles = projects.filter((project) => !project.projectSummary?.trim())
 
   if (projectsMissingProfiles.length === 0) {
@@ -73,7 +74,7 @@ export async function generateProjectProfilesForProjects(projects: GithubProject
   }
 }
 
-// 🔰 重新生成已有简介的项目（用于「重新生成项目简介」按钮），支持增量处理跳过已生成的
+// 重新生成已有简介的项目（用于「重新生成项目简介」按钮），支持增量处理跳过已生成的
 export async function regenerateProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference, processedRepositoryIds: string[] = []): Promise<ProjectProfileProgress & { processedRepositoryIds: string[]; updatedProjects: GithubProject[] }> {
   const totalCount = await countProjectsForFilters(filters)
 
@@ -128,17 +129,18 @@ export async function regenerateProjectProfiles(filters: ProjectSearchFilters, p
 
 async function generateAndSaveProjectProfiles(projects: GithubProject[], preference: UserPreference, force: boolean) {
   const savedProjects: GithubProject[] = []
-  const tasks = projects
-    .filter((project) => force || !project.projectSummary?.trim())
-    .map((project) => async () => {
-      try {
-        const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
-        await updateProjectProfile(project.repositoryId, profile)
-        savedProjects.push({ ...project, projectSummary: profile })
-      } catch (error) {
-        console.error(`项目简介生成失败 ${project.repositoryId}:`, error instanceof Error ? error.message : String(error))
-      }
-    })
+  const pendingProjects = projects.filter((project) => force || !project.projectSummary?.trim())
+
+  console.log(`[project-profile] 🤖 正在为 ${pendingProjects.length} 个项目生成 AI 简介...`)
+  const tasks = pendingProjects.map((project) => async () => {
+    try {
+      const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
+      await updateProjectProfile(project.repositoryId, profile)
+      savedProjects.push({ ...project, projectSummary: profile })
+    } catch (error) {
+      console.error(`[project-profile] 项目简介生成失败 ${project.repositoryId}:`, error instanceof Error ? error.message : String(error))
+    }
+  })
 
   const workers = Array.from({ length: aiGenerateConcurrency })
   await Promise.all(workers.map(async () => {
@@ -147,14 +149,60 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
       if (task) await task()
     }
   }))
-
-  try {
-    await withTimeout(upsertProjectProfileVectors(savedProjects), vectorUpsertTimeoutMs)
-  } catch (error) {
-    console.error('[project-profile] 项目简介向量入库失败:', error instanceof Error ? error.message : String(error))
-  }
+  console.log(`[project-profile] 📝 项目简介生成完成 (成功 ${savedProjects.length}/${pendingProjects.length})`)
 
   return savedProjects
+}
+
+// 查询向量索引状态：有多少项目有简介但未向量化，以及最后同步时间
+export async function getVectorIndexStatus(filters: ProjectSearchFilters): Promise<VectorIndexStatus> {
+  const [projectsWithProfiles, vectorIds] = await Promise.all([
+    listProjectsForProfileRegeneration({ ...filters, excludeRepositoryIds: [], limit: 10000 }),
+    getAllVectorRepositoryIds(),
+  ])
+
+  const projects = projectsWithProfiles.filter((project) => project.projectSummary?.trim())
+  const vectorIdSet = new Set(vectorIds)
+  const indexedCount = projects.filter((project) => vectorIdSet.has(project.repositoryId)).length
+  const unindexedCount = projects.length - indexedCount
+  const lastIndexedAt = await getLastIndexedAt()
+
+  return {
+    indexedCount,
+    unindexedCount,
+    lastSyncAt: lastIndexedAt ? new Date(lastIndexedAt).toISOString() : null,
+  }
+}
+
+// 找出所有有简介但未向量化的项目，生成向量并写入 Milvus
+export async function syncUnindexedProjectVectors(filters: ProjectSearchFilters): Promise<VectorIndexStatus & { syncedCount: number }> {
+  const status = await getVectorIndexStatus(filters)
+
+  if (status.unindexedCount === 0) {
+    return { ...status, syncedCount: 0 }
+  }
+
+  const allProjects = await listProjectsForProfileRegeneration({ ...filters, excludeRepositoryIds: [], limit: 10000 })
+  const vectorIds = await getAllVectorRepositoryIds()
+  const vectorIdSet = new Set(vectorIds)
+  const unindexedProjects = allProjects.filter((project) => project.projectSummary?.trim() && !vectorIdSet.has(project.repositoryId))
+
+  if (unindexedProjects.length === 0) {
+    return { ...status, syncedCount: 0 }
+  }
+
+  console.log(`[project-profile] 🧬 同步推荐索引: ${unindexedProjects.length} 个项目待入库`)
+  try {
+    await withTimeout(upsertProjectProfileVectors(unindexedProjects), vectorUpsertTimeoutMs)
+    console.log(`[project-profile] 🧬 同步推荐索引完成: ${unindexedProjects.length} 个项目已入库`)
+  } catch (error) {
+    console.error('[project-profile] 同步推荐索引失败:', error instanceof Error ? error.message : String(error))
+    throw error
+  }
+
+  const newStatus = await getVectorIndexStatus(filters)
+
+  return { ...newStatus, syncedCount: unindexedProjects.length }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
@@ -165,7 +213,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
   return Promise.race([promise, timeout])
 }
 
-// 🔰 查询项目简介生成进度（未开始/进行中/已完成）
+// 查询项目简介生成进度（未开始/进行中/已完成）
 export async function getProjectProfileStatus(filters: ProjectSearchFilters): Promise<ProjectProfileProgress> {
   const [totalCount, missingCount] = await Promise.all([
     countProjectsForFilters(filters),
@@ -257,10 +305,3 @@ function buildProjectProfilePrompt(project: GithubProject, prompt: string) {
 - README：${readme}`
 }
 
-function stripHtml(text: string) {
-  return text
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&[a-z]+;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}

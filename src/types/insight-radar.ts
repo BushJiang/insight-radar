@@ -1,4 +1,4 @@
-// 🔰 TypeScript 类型定义：项目、搜索、推荐、采集、用户偏好等全部接口和类型，全项目共用
+// TypeScript 类型定义：项目、搜索、推荐、采集、用户偏好等全部接口和类型，全项目共用
 export type CollectionJobStatus = 'pending' | 'running' | 'success' | 'partial_success' | 'failed'
 
 export type ProjectMaturity = 'early' | 'growth' | 'mature' | 'stalled'
@@ -70,9 +70,16 @@ export interface UserPreference {
   id: string
   domains: string[]
   recommendationAgentPrompt: string
+  projectAnalysisAgentPrompt: string
   projectProfileAgentPrompt: string
-  candidateProjectCount: number
+  candidateMultiplier: number
   updatedAt: string
+}
+
+export interface ProjectScore {
+  totalScore: number
+  dimensions: Record<string, number>
+  analysisReason: string
 }
 
 export interface RecommendationExplanation {
@@ -80,6 +87,7 @@ export interface RecommendationExplanation {
   projectIds: string[]
   query: string
   reasons: Record<string, string>
+  scores: Record<string, ProjectScore>
   facts: string[]
   inferences: string[]
   suggestions: string[]
@@ -93,6 +101,12 @@ export interface RecommendationPageState {
   filters: ProjectSearchFilters
   recommendationLimit: number
   recommendations: RecommendationExplanation[]
+}
+
+export interface VectorIndexStatus {
+  indexedCount: number
+  unindexedCount: number
+  lastSyncAt: string | null
 }
 
 export interface ProjectProfileProgress {

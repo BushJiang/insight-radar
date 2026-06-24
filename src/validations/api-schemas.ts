@@ -1,4 +1,4 @@
-// 🔰 API 校验 Schema：Zod 定义搜索/采集/推荐请求体验证规则，所有 API 路由共用
+// API 校验 Schema：Zod 定义搜索/采集/推荐请求体验证规则，所有 API 路由共用
 import { z } from 'zod'
 
 export const projectMaturityEnum = z.enum(['early', 'growth', 'mature', 'stalled'])
@@ -21,8 +21,9 @@ export const userPreferenceSchema = z.object({
   id: z.string(),
   domains: z.array(z.string()).default([]),
   recommendationAgentPrompt: z.string().default(''),
+  projectAnalysisAgentPrompt: z.string().default(''),
   projectProfileAgentPrompt: z.string().default(''),
-  candidateProjectCount: z.number().int().min(1).max(50).default(4),
+  candidateMultiplier: z.number().int().refine((value) => [2, 4, 8, 16].includes(value), { message: '候选池倍数必须是 2、4、8 或 16' }).default(4),
   updatedAt: z.string(),
 })
 
@@ -39,4 +40,3 @@ export const recommendationRequestSchema = z.object({
   recommendationLimit: z.number().int().min(1).max(50).default(4),
   preference: userPreferenceSchema.partial().optional(),
 })
-

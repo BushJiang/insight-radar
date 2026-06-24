@@ -1,4 +1,4 @@
-// 🔰 项目推荐智能体：用 DeepSeek 模型根据用户需求从候选项目中生成推荐理由（Reasons/Facts/Inferences/Suggestions）。instructions 为系统护栏
+// 项目推荐智能体：用 DeepSeek 模型根据用户需求从候选项目中生成推荐理由（Reasons/Facts/Inferences/Suggestions）。instructions 为系统护栏
 // Agent instructions 是系统级护栏，定义智能体身份和不可违反的基本规则，用户无法通过页面修改。
 // 用户在 /settings 页面保存的 recommendationAgentPrompt 存储在 localStorage，运行时通过
 // agent.generate(userPrompt) 传入，与 instructions 叠加后一起发给模型。前后两层都生效。
@@ -16,5 +16,5 @@ export const projectRecommendationAgent = new Agent({
 - 不要编造候选项目之外的信息。
 - 不要使用 Markdown 格式，不要输出 ##、**、列表符号或代码块。
 `,
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-v4-pro',
 })

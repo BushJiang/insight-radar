@@ -39,7 +39,7 @@ EOF
         echo "user.yaml file does not exist. Please try to create it in the current directory."
         exit 1
     fi
-    
+
     sudo docker run -d \
         --name milvus-standalone \
         --security-opt seccomp:unconfined \
@@ -59,7 +59,7 @@ EOF
         --health-start-period=90s \
         --health-timeout=20s \
         --health-retries=3 \
-        milvusdb/milvus:v3.0-beta \
+        milvusdb/milvus:v2.5.0 \
         milvus run standalone  1> /dev/null
 }
 

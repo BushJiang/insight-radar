@@ -1,4 +1,4 @@
-// 🔰 搜索栏：关键词输入 + 四个下拉筛选（来源/语言/成熟度/时间范围）+ 搜索按钮。搜索页使用
+// 搜索栏：关键词输入 + 四个下拉筛选（来源/语言/成熟度/时间范围）+ 搜索按钮。搜索页使用
 'use client'
 
 import type { ProjectMaturity, ProjectSearchFilters } from '@/types/insight-radar'

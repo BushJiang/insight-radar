@@ -22,7 +22,7 @@ Thumbs.db
 
 # ===== Environment & Secrets =====
 .env
-.env.local
+.env
 .env.*.local
 *.pem
 *.key

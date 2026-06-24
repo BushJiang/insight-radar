@@ -1,4 +1,4 @@
-// 🔰 数据库 Schema：projects 单表定义（28 字段），Drizzle ORM + PostgreSQL。uniqueIndex 防止仓库重复插入
+// 数据库 Schema：projects 单表定义（28 字段），Drizzle ORM + PostgreSQL。uniqueIndex 防止仓库重复插入
 import { sql } from 'drizzle-orm'
 import { index, boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core'
 import type { ProjectMaturity } from '@/types/insight-radar'

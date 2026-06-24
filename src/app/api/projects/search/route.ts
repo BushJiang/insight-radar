@@ -1,4 +1,4 @@
-// 🔰 POST /api/projects/search — 搜索高价值项目库，支持关键词、语言、成熟度等筛选
+// POST /api/projects/search — 搜索高价值项目库，支持关键词、语言、成熟度等筛选
 import { ZodError } from 'zod'
 import { resolveErrorMessage } from '@/lib/api-response'
 import { handleZodError } from '@/lib/api-validation'
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
         page: body.page,
         pageSize: body.pageSize,
       }),
-// 🔰 查询所有已采集的来源 GitHub 账号，供前端筛选下拉框使用
+      // 查询所有已采集的来源 GitHub 账号，供前端筛选下拉框使用
       listCollectedSourceGithubUsernames(),
     ])
 

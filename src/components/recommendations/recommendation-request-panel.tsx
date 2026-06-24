@@ -1,4 +1,4 @@
-// 🔰 推荐请求面板：项目需求输入 + 筛选条件 + 推荐数量 + 智能推荐/生成简介/重新生成按钮。推荐页使用
+// 推荐请求面板：项目需求输入 + 筛选条件 + 推荐数量 + 智能推荐/清空数据按钮。推荐页使用
 'use client'
 
 import type { ProjectMaturity, ProjectSearchFilters } from '@/types/insight-radar'
@@ -14,20 +14,19 @@ interface RecommendationRequestPanelProps {
   sources: string[]
   loading?: boolean
   recommending?: boolean
-  profileRunning?: boolean
-  canGenerateProfiles: boolean
+  syncingIndex?: boolean
+  canSyncIndex?: boolean
   recommendationLimit: number
   onQueryChange: (value: string) => void
   onFiltersChange: (filters: Partial<ProjectSearchFilters>) => void
   onRecommendationLimitChange: (limit: number) => void
   onSourceInputFocus?: () => void
   onSubmit: () => void
-  onGenerateProfiles: () => void
-  onRegenerateProfiles: () => void
+  onSyncIndex: () => void
   onClearData: () => void
 }
 
-export function RecommendationRequestPanel({ query, filters, sources, loading = false, recommending = false, profileRunning = false, canGenerateProfiles, recommendationLimit, onQueryChange, onFiltersChange, onRecommendationLimitChange, onSourceInputFocus, onSubmit, onGenerateProfiles, onRegenerateProfiles, onClearData }: RecommendationRequestPanelProps) {
+export function RecommendationRequestPanel({ query, filters, sources, loading = false, recommending = false, syncingIndex = false, canSyncIndex = true, recommendationLimit, onQueryChange, onFiltersChange, onRecommendationLimitChange, onSourceInputFocus, onSubmit, onSyncIndex, onClearData }: RecommendationRequestPanelProps) {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     onSubmit()
@@ -66,17 +65,14 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
       </div>
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <Button type="submit" disabled={loading || profileRunning} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
+        <Button type="submit" disabled={loading} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
           {recommending ? '正在推荐' : '智能推荐'}
         </Button>
-        <Button type="button" variant="outline" disabled={loading || profileRunning || !canGenerateProfiles} onClick={onGenerateProfiles} className="active:scale-95">
-          生成项目简介
+        <Button type="button" disabled={loading || syncingIndex || !canSyncIndex} onClick={onSyncIndex} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
+          {syncingIndex ? '更新中...' : '更新数据库'}
         </Button>
-        <Button type="button" disabled={loading || profileRunning} onClick={onRegenerateProfiles} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">
-          重新生成项目简介
-        </Button>
-        <Button type="button" variant="destructive" disabled={loading || profileRunning} onClick={onClearData} className="active:scale-95">
-          清空数据
+        <Button type="button" variant="destructive" disabled={loading} onClick={onClearData} className="active:scale-95">
+          清空数据库
         </Button>
       </div>
       <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
@@ -85,4 +81,3 @@ export function RecommendationRequestPanel({ query, filters, sources, loading = 
     </form>
   )
 }
-

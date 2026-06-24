@@ -1,4 +1,4 @@
-// 🔰 用户偏好表单：领域选择 + 推荐/简介提示词模板 + 候选数量，数据保存到 localStorage。设置页使用
+// 用户偏好表单：领域选择 + 推荐/简介提示词模板 + 候选池倍数，数据保存到 localStorage。设置页使用
 'use client'
 
 import { useState } from 'react'
@@ -6,6 +6,7 @@ import { normalizePreference, preferenceStorageKey } from '@/lib/default-prefere
 import { readBrowserStorage, writeBrowserStorage } from '@/lib/browser-storage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { UserPreference } from '@/types/insight-radar'
 
@@ -21,8 +22,9 @@ interface PreferenceFormState {
 
 const unlimitedDomain = '不限领域'
 const domains = [unlimitedDomain, '智能体', '前端', '后端', '数据库', 'AI 工具', '开发工具', '基础设施']
+const githubTokenStorageKey = 'insight-radar-github-token'
 
-// 🔰 用户设置表单，编辑领域偏好、推荐提示词、项目简介提示词，数据存 localStorage
+// 用户设置表单，编辑领域偏好、推荐提示词、项目简介提示词，数据存 localStorage
 export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
   const [savedState, setSavedState] = useState<PreferenceFormState>(() => {
     const saved = readBrowserStorage(preferenceStorageKey, null)
@@ -33,8 +35,10 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
       otherDomain: '',
     }
   })
+  const [githubToken, setGithubToken] = useState(() => readBrowserStorage(githubTokenStorageKey, ''))
   const [saved, setSaved] = useState(false)
   const { preference, otherDomainEnabled, otherDomain } = savedState
+  const githubTokenMask = githubToken ? '*'.repeat(githubToken.length) : ''
 
   function saveSettings() {
     const trimmedOtherDomain = otherDomain.trim()
@@ -51,6 +55,8 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
     })
 
     writeBrowserStorage(preferenceStorageKey, nextPreference)
+    writeBrowserStorage(githubTokenStorageKey, githubToken.trim())
+    setGithubToken(githubToken.trim())
     setSavedState({
       preference: nextPreference,
       otherDomainEnabled,
@@ -131,6 +137,30 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
         />
       </PreferenceCard>
 
+      <PreferenceCard title="GitHub Token">
+        <Input
+          id="github-token"
+          type="text"
+          value={githubTokenMask}
+          onChange={(event) => {
+            setSaved(false)
+            setGithubToken(event.target.value)
+          }}
+          placeholder="请输入 GitHub Token"
+          autoComplete="off"
+        />
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">保存后会写入浏览器本地存储，采集 GitHub Star 项目时自动使用。</p>
+      </PreferenceCard>
+
+      <PreferenceCard title="项目分析提示词">
+        <Textarea
+          value={preference.projectAnalysisAgentPrompt}
+          onChange={(event) => updatePreference({ projectAnalysisAgentPrompt: event.target.value })}
+          placeholder="请输入项目分析提示词"
+        />
+        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{candidateProjects}}'}（候选项目列表）、{'{{userQuery}}'}（用户需求）、{'{{domainPreferences}}'}（领域偏好）、{'{{recommendationLimit}}'}（推荐数量）。</p>
+      </PreferenceCard>
+
       <PreferenceCard title="项目推荐提示词">
         <Textarea
           value={preference.recommendationAgentPrompt}
@@ -149,18 +179,18 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
         <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{projectName}}'}（项目名称）、{'{{repositoryFullName}}'}（仓库全名）、{'{{projectDescription}}'}（项目描述）、{'{{primaryLanguage}}'}（主要语言）、{'{{readme}}'}（README 内容）。</p>
       </PreferenceCard>
 
-      <PreferenceCard title="候选项目数量">
-        <Input
-          id="candidate-project-count"
-          type="number"
-          min={1}
-          max={50}
-          step={1}
-          value={preference.candidateProjectCount}
-          onChange={(event) => updatePreference({ candidateProjectCount: Number(event.target.value) || 1 })}
-          className="mt-2 max-w-48"
-        />
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">系统会先从项目库找出这些候选项目，再由推荐智能体筛选出最终推荐数量。</p>
+      <PreferenceCard title="候选池倍数">
+        <Select value={String(preference.candidateMultiplier)} onValueChange={(value) => updatePreference({ candidateMultiplier: Number(value) })}>
+          <SelectTrigger className="mt-2 w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[2, 4, 8, 16].map((value) => (
+              <SelectItem key={value} value={String(value)}>{value}×</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">候选池 = 推荐数量 × 倍数。倍数越大搜索范围越广，不增加 AI 调用成本。</p>
       </PreferenceCard>
 
       <div className="min-h-20">

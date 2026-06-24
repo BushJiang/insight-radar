@@ -1,11 +1,11 @@
-// 🔰 POST /api/project-profiles — 项目简介生成（action='status'查询 / 'generate'生成 / 'regenerate'重新生成）
+// POST /api/project-profiles — 项目简介管理（status 查询 / generate 生成 / regenerate 重新生成 / vector-status 索引状态 / sync-vectors 同步索引）
 import { resolveErrorMessage } from '@/lib/api-response'
 import { normalizePreference } from '@/lib/default-preference'
-import { generateMissingProjectProfiles, getProjectProfileStatus, regenerateProjectProfiles } from '@/lib/project-profile-service'
-import type { GithubProject, ProjectMaturity, ProjectProfileProgress, UserPreference } from '@/types/insight-radar'
+import { generateMissingProjectProfiles, getProjectProfileStatus, getVectorIndexStatus, regenerateProjectProfiles, syncUnindexedProjectVectors } from '@/lib/project-profile-service'
+import type { GithubProject, ProjectMaturity, ProjectProfileProgress, UserPreference, VectorIndexStatus } from '@/types/insight-radar'
 
 interface ProjectProfilesRequestBody {
-  action: 'status' | 'generate' | 'regenerate'
+  action: 'status' | 'generate' | 'regenerate' | 'vector-status' | 'sync-vectors'
   query?: string
   filters: {
     query?: string
@@ -22,6 +22,8 @@ interface ProjectProfilesResponseBody {
   progress: ProjectProfileProgress
   processedRepositoryIds: string[]
   projects: GithubProject[]
+  vectorStatus?: VectorIndexStatus
+  syncedCount?: number
   error: string | null
 }
 
@@ -35,11 +37,36 @@ export async function POST(req: Request) {
       sourceGithubUsername: body.filters.sourceGithubUsername ?? null,
       days: body.filters.days ?? null,
     }
-// 🔰 合并用户偏好，缺失字段用默认值补齐
     const preference = normalizePreference(body.preference)
+
+    if (body.action === 'vector-status') {
+      const vectorStatus = await getVectorIndexStatus(filters)
+      const response: ProjectProfilesResponseBody = {
+        progress: { status: 'ready', completedCount: vectorStatus.indexedCount, totalCount: vectorStatus.indexedCount + vectorStatus.unindexedCount, message: null },
+        processedRepositoryIds: [],
+        projects: [],
+        vectorStatus,
+        error: null,
+      }
+      return Response.json(response)
+    }
+
+    if (body.action === 'sync-vectors') {
+      const result = await syncUnindexedProjectVectors(filters)
+      const response: ProjectProfilesResponseBody = {
+        progress: { status: 'ready', completedCount: 0, totalCount: 0, message: null },
+        processedRepositoryIds: [],
+        projects: [],
+        vectorStatus: result,
+        syncedCount: result.syncedCount,
+        error: null,
+      }
+      return Response.json(response)
+    }
+
+    // status / generate / regenerate
     const processedRepositoryIds = body.processedRepositoryIds ?? []
     const profileResult = body.action === 'status'
-// 🔰 根据 action 分发：status 查询进度，generate 生成简介，regenerate 重新生成
       ? { ...(await getProjectProfileStatus(filters)), processedRepositoryIds }
       : body.action === 'regenerate'
         ? await regenerateProjectProfiles(filters, preference, processedRepositoryIds)

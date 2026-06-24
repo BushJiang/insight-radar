@@ -1,4 +1,4 @@
-// 🔰 shadcn/ui Input 基础组件：文本输入框，所有页面通用
+// shadcn/ui Input 基础组件：文本输入框，所有页面通用
 import * as React from "react"
 
 import { cn } from "@/lib/utils"

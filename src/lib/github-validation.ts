@@ -1,4 +1,4 @@
-// 🔰 GitHub 用户名校验：正则验证用户名格式合法性（1-39 位字母数字连字符），采集表单使用
+// GitHub 用户名校验：正则验证用户名格式合法性（1-39 位字母数字连字符），采集表单使用
 const githubUsernamePattern = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/
 
 export function validateGithubUsername(username: string) {
@@ -9,7 +9,7 @@ export function validateGithubUsername(username: string) {
   }
 
   if (value.includes(',') || value.includes(' ') || value.includes('/')) {
-    return '一次只能输入一个 GitHub 用户名。'
+    return '请输入正确 GitHub 用户名，不要包含逗号、空格或 GitHub 链接。'
   }
 
   if (!githubUsernamePattern.test(value)) {

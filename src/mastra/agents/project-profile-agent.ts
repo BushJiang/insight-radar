@@ -1,4 +1,4 @@
-// 🔰 项目简介生成智能体：用 deepseek-v4-flash 为 GitHub 项目生成 ≤280 字中文简介。instructions 为系统护栏，用户可在设置页定义 prompt 模板
+// 项目简介生成智能体：用 deepseek-v4-flash 为 GitHub 项目生成 ≤280 字中文简介。instructions 为系统护栏，用户可在设置页定义 prompt 模板
 // Agent instructions 是系统级护栏，定义智能体身份和不可违反的基本规则，用户无法通过页面修改。
 // 用户在 /settings 页面保存的 projectProfileAgentPrompt 存储在 localStorage，运行时通过
 // agent.generate(userPrompt) 传入，与 instructions 叠加后一起发给模型。前后两层都生效。

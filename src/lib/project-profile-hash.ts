@@ -2,6 +2,10 @@ import { createHash } from 'crypto'
 import type { GithubProject } from '@/types/insight-radar'
 
 export function buildProfileHash(project: GithubProject) {
+  // 获取日期并统一转为无毫秒 ISO 格式，避免不同来源（GitHub API / PostgreSQL / Date.toISOString）格式差异导致 hash 不一致
+  const rawDate = project.githubUpdatedAt ?? project.updatedAt ?? ''
+  const normalizedDate = new Date(rawDate).toISOString().replace(/\.\d{3}Z$/, 'Z')
+
   return createHash('sha256')
     .update([
       project.repositoryId,
@@ -12,7 +16,7 @@ export function buildProfileHash(project: GithubProject) {
       project.language,
       project.maturity,
       project.sourceGithubUsername,
-      project.githubUpdatedAt ?? project.updatedAt,
+      normalizedDate,
     ].join('\n'))
     .digest('hex')
 }

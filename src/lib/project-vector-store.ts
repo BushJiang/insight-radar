@@ -15,10 +15,11 @@ interface ProjectVectorSearchResult {
   profileHash: string
 }
 
-const collectionName = process.env.MILVUS_PROJECT_PROFILE_COLLECTION || 'insight_radar_project_profiles_bge_m3_1024_v1'
+const collectionName = process.env.MILVUS_PROJECT_PROFILE_COLLECTION || 'InsightRadar'
 const defaultIvfNlist = 128
 const defaultIvfNprobe = 16
 
+// 将项目列表的简介文本转为向量并存入 Milvus 集合，支持增量更新
 export async function upsertProjectProfileVectors(projects: GithubProject[]) {
   const projectsWithProfiles = projects.filter((project) => project.projectSummary?.trim())
 
@@ -26,8 +27,12 @@ export async function upsertProjectProfileVectors(projects: GithubProject[]) {
     return
   }
 
+  console.log(`[project-vector-store] 🧬 正在为 ${projectsWithProfiles.length} 个项目生成向量 (模型: ${getProjectProfileEmbeddingModel()})...`)
   const profileTexts = projectsWithProfiles.map(buildProjectProfileEmbeddingText)
   const profileVectors = await embedProjectProfileTexts(profileTexts)
+  console.log(`[project-vector-store] 🧬 向量生成完成 (${profileVectors.length} 条, 维度: ${getProjectProfileVectorDimension()})`)
+
+  console.log(`[project-vector-store] 📥 正在写入 Milvus 集合 ${collectionName}...`)
   const client = await getMilvusClient()
 
   await ensureProjectProfileCollection(client)
@@ -47,10 +52,13 @@ export async function upsertProjectProfileVectors(projects: GithubProject[]) {
       indexedAt: Date.now(),
     })),
   })
+  console.log(`[project-vector-store] 📥 Milvus 写入完成 (${projectsWithProfiles.length} 条)`)
   await client.refreshLoad({ collection_name: collectionName })
 }
 
+// 将用户查询文本转为向量，在项目简介向量集合中做相似度搜索，返回最匹配的项目列表
 export async function searchProjectProfileVectors({ query, filters, limit }: ProjectVectorSearchOptions): Promise<ProjectVectorSearchResult[]> {
+  // 没有 Milvus 配置或用户需求为空时直接返回空结果，让推荐服务回退到 PostgreSQL 候选项目
   if (!process.env.MILVUS_ADDRESS || !query.trim()) {
     return []
   }
@@ -58,6 +66,7 @@ export async function searchProjectProfileVectors({ query, filters, limit }: Pro
   try {
     const client = await getMilvusClient()
     await ensureProjectProfileCollection(client)
+    // 把用户需求文本转成向量，后续用它在项目简介向量集合里做相似度搜索
     const queryVector = await embedProjectProfileQuery(query)
     const result = await client.search({
       collection_name: collectionName,
@@ -82,6 +91,59 @@ export async function searchProjectProfileVectors({ query, filters, limit }: Pro
   }
 }
 
+// 获取 Milvus 中所有已入库的 repositoryId 列表，用于与 PostgreSQL 对比找出未索引项目
+export async function getAllVectorRepositoryIds(): Promise<string[]> {
+  if (!process.env.MILVUS_ADDRESS) {
+    return []
+  }
+
+  try {
+    const client = await getMilvusClient()
+    await ensureProjectProfileCollection(client)
+    const result = await client.query({
+      collection_name: collectionName,
+      filter: 'repositoryId != ""',
+      output_fields: ['repositoryId'],
+      limit: 10000,
+    })
+
+    return result.data.map((item) => String(item.repositoryId))
+  } catch (error) {
+    console.error('[project-vector-store] 查询向量库 repositoryId 列表失败:', error instanceof Error ? error.message : String(error))
+
+    return []
+  }
+}
+
+// 获取 Milvus 中最近一次向量入库的时间，作为「最后同步时间」展示给用户
+export async function getLastIndexedAt(): Promise<number | null> {
+  if (!process.env.MILVUS_ADDRESS) {
+    return null
+  }
+
+  try {
+    const client = await getMilvusClient()
+    await ensureProjectProfileCollection(client)
+    const result = await client.query({
+      collection_name: collectionName,
+      filter: 'repositoryId != ""',
+      output_fields: ['indexedAt'],
+      limit: 10000,
+    })
+
+    if (result.data.length === 0) {
+      return null
+    }
+
+    return Math.max(...result.data.map((item) => Number(item.indexedAt ?? 0)))
+  } catch (error) {
+    console.error('[project-vector-store] 查询最后同步时间失败:', error instanceof Error ? error.message : String(error))
+
+    return null
+  }
+}
+
+// 清空项目简介向量集合中的所有数据
 export async function clearProjectProfileVectors() {
   if (!process.env.MILVUS_ADDRESS) {
     return
@@ -95,6 +157,7 @@ export async function clearProjectProfileVectors() {
   }
 }
 
+// 根据搜索过滤条件构建 Milvus 查询的 filter 表达式字符串
 export function buildMilvusFilter(filters: ProjectSearchFilters) {
   const conditions: string[] = []
 
@@ -118,6 +181,7 @@ export function buildMilvusFilter(filters: ProjectSearchFilters) {
   return conditions.length > 0 ? conditions.join(' && ') : undefined
 }
 
+// 创建并返回 Milvus 客户端实例，并确保连接已建立
 async function getMilvusClient() {
   const client = new MilvusClient({
     address: process.env.MILVUS_ADDRESS ?? 'localhost:19530',
@@ -128,6 +192,7 @@ async function getMilvusClient() {
   return client
 }
 
+// 确保项目简介向量集合存在，若不存在则创建，若已存在则检查兼容性，最后加载集合到内存
 async function ensureProjectProfileCollection(client: MilvusClient) {
   const existingCollection = await client.hasCollection({ collection_name: collectionName })
 
@@ -163,6 +228,7 @@ async function ensureProjectProfileCollection(client: MilvusClient) {
   await client.loadCollection({ collection_name: collectionName })
 }
 
+// 检查已存在的集合字段是否与当前代码所需的 Schema 兼容，若不兼容则抛出错误
 async function assertCompatibleCollection(client: MilvusClient) {
   const collection = await client.describeCollection({ collection_name: collectionName })
   const fields = collection.schema.fields
@@ -183,6 +249,7 @@ async function assertCompatibleCollection(client: MilvusClient) {
   }
 }
 
+// 将单个项目的元数据拼接成用于生成向量嵌入的文本
 function buildProjectProfileEmbeddingText(project: GithubProject) {
   return [
     `项目：${project.fullName}`,
@@ -192,6 +259,7 @@ function buildProjectProfileEmbeddingText(project: GithubProject) {
   ].join('\n')
 }
 
+// 转义 Milvus filter 表达式中的特殊字符（双引号和反斜杠），防止注入或语法错误
 function escapeMilvusString(value: string) {
   return value.replace(/["\\]/g, (matched) => `\\${matched}`)
 }
