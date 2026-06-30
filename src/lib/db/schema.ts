@@ -24,6 +24,7 @@ export const projects = pgTable('projects', {
   pushedAt: timestamp('pushed_at', { withTimezone: true }),
   githubUpdatedAt: timestamp('github_updated_at', { withTimezone: true }).notNull(),
   readmeContent: text('readme_content'),
+  readmeHash: varchar('readme_hash', { length: 64 }),
   projectSummary: varchar('readme_summary', { length: 300 }),
   matchReason: text('match_reason').notNull(),
   maturity: text('maturity').$type<ProjectMaturity>().notNull(),

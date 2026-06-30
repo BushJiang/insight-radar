@@ -1,14 +1,41 @@
-// 智能推荐服务：Milvus 向量搜索候选 → AI 分析评分筛选 → AI 逐项目生成推荐理由
-import { mastra } from '@/mastra'
+// 智能推荐服务：提供推荐工作流需要的纯业务能力，具体编排由 Mastra workflow 负责
+import { z } from 'zod'
+import { projectAnalysisAgent } from '@/mastra/agents/project-analysis-agent'
+import { projectRecommendationAgent } from '@/mastra/agents/project-recommendation-agent'
 import { getProjectMapByRepositoryIds } from '@/lib/projects-repository'
 import { buildProfileHash } from '@/lib/project-profile-hash'
-import { getProjectProfileStatus } from '@/lib/project-profile-service'
+import { ensureProjectProfileReadinessForRecommendation, type ProjectProfileReadinessResult } from '@/lib/project-profile-service'
 import { searchProjectProfileVectors } from '@/lib/project-vector-store'
 import { truncateText } from '@/lib/utils'
-import type { GithubProject, ProjectSearchFilters, RecommendationExplanation, UserPreference } from '@/types/insight-radar'
+import type { GithubProject, ProjectRecommendationReason, ProjectSearchFilters, RecommendationExplanation, UserPreference } from '@/types/insight-radar'
 
-const recommendationReasonMaxLength = 280
-const maxProjectsPerAnalysisBatch = 20
+const recommendationReasonSchema = z.object({
+  repositoryId: z.union([z.string(), z.number()]).transform(String),
+  fitReasons: z.array(z.string().trim().min(1)).length(3),
+  riskReminder: z.string().trim().min(1),
+})
+const recommendationReasonsResponseSchema = z.object({
+  recommendations: z.array(recommendationReasonSchema),
+})
+// 每批最多 10 个项目，一次 API 调用中横向对比评分，并发数由用户在设置页控制
+const maxProjectsPerAnalysisBatch = 10
+// 每批最多 5 个项目，一次 API 调用中批量生成推荐理由，并发数由用户在设置页控制
+const maxProjectsPerReasonBatch = 5
+
+export interface RecommendationWorkflowInput {
+  query: string
+  filters: ProjectSearchFilters
+  recommendationLimit: number
+  preference: UserPreference
+}
+
+export interface RecommendationWorkflowOutput {
+  progress: { status: 'ready' | 'running' | 'failed'; completedCount: number; totalCount: number; message: string | null }
+  recommendation: RecommendationExplanation | null
+  projects: GithubProject[]
+}
+
+export type RecommendationReadinessResult = ProjectProfileReadinessResult
 
 interface AnalysisResult {
   repositoryId: string
@@ -18,28 +45,93 @@ interface AnalysisResult {
   analysisReason: string
 }
 
-interface GenerateRecommendationsOptions {
-  query: string
-  filters: ProjectSearchFilters
-  recommendationLimit: number
-  preference: UserPreference
+export interface RecommendationCandidateSearchResult extends RecommendationWorkflowInput {
+  progress: RecommendationWorkflowOutput['progress']
+  candidateProjects: GithubProject[]
+}
+
+export interface RecommendationAnalysisResult extends RecommendationCandidateSearchResult {
+  analysisResults: AnalysisResult[]
+  selectedProjects: GithubProject[]
+}
+
+export interface RecommendationReasonResult extends RecommendationAnalysisResult {
+  reasons: Record<string, ProjectRecommendationReason>
+}
+
+// 生成推荐前先确保项目简介和向量状态可用；这是 workflow 的准备阶段
+export async function ensureRecommendationReadiness(filters: ProjectSearchFilters, preference: UserPreference): Promise<RecommendationReadinessResult> {
+  return ensureProjectProfileReadinessForRecommendation(filters, preference)
 }
 
 // 生成推荐的主入口：简介检查 → 向量搜索 → AI 分析评分筛选 → AI 生成推荐理由
-export async function generateProjectRecommendations({ query, filters, recommendationLimit, preference }: GenerateRecommendationsOptions) {
+export async function generateProjectRecommendations({ query, filters, recommendationLimit, preference }: RecommendationWorkflowInput) {
   console.log(`[recommendation] 🔍 收到推荐请求: "${query}"`)
-  const progress = await getProjectProfileStatus(filters)
+  const readiness = await ensureRecommendationReadiness(filters, preference)
 
-  if (progress.status !== 'ready') {
-    console.log(`[recommendation] ⚠️ 项目简介未就绪 (${progress.completedCount}/${progress.totalCount})，中止推荐`)
-    return { progress, recommendation: null, projects: [] }
+  if (readiness.syncedCount > 0 || readiness.profiledCount > 0) {
+    console.log(`[recommendation] 🧬 推荐索引已同步: 生成简介 ${readiness.profiledCount} 个, 向量更新 ${readiness.syncedCount} 个`)
   }
 
+  if (readiness.progress.status !== 'ready') {
+    console.log(`[recommendation] ⚠️ 项目简介未就绪 (${readiness.progress.completedCount}/${readiness.progress.totalCount})，中止推荐`)
+    return { progress: readiness.progress, recommendation: null, projects: [] }
+  }
+
+  return runRecommendationSearch({ query, filters, recommendationLimit, preference, progress: readiness.progress })
+}
+
+export async function searchRecommendationCandidates({ query, filters, recommendationLimit, preference, progress }: RecommendationWorkflowInput & { progress: RecommendationWorkflowOutput['progress'] }): Promise<RecommendationCandidateSearchResult> {
   console.log(`[recommendation] 📊 项目简介就绪 (${progress.completedCount}/${progress.totalCount})`)
   const candidateProjectCount = Math.max(1, Math.min(recommendationLimit * preference.candidateMultiplier, 50))
   console.log(`[recommendation] 🔎 开始向量搜索，候选数: ${candidateProjectCount} (推荐 ${recommendationLimit} × ${preference.candidateMultiplier} 倍)`)
   const candidateProjects = await getCandidateProjects(query, filters, candidateProjectCount)
   console.log(`[recommendation] 🎯 向量搜索返回 ${candidateProjects.length} 个候选项目`)
+
+  return { query, filters, recommendationLimit, preference, progress, candidateProjects }
+}
+
+export async function analyzeRecommendationCandidates(input: RecommendationCandidateSearchResult): Promise<RecommendationAnalysisResult> {
+  const { candidateProjects, query, preference, recommendationLimit } = input
+
+  if (candidateProjects.length === 0) return { ...input, analysisResults: [], selectedProjects: [] }
+
+  console.log(`[recommendation] 📊 正在分析 ${candidateProjects.length} 个候选项目...`)
+  let analysisResults: AnalysisResult[]
+
+  try {
+    analysisResults = await analyzeCandidateProjects(candidateProjects, query, preference, recommendationLimit)
+    console.log(`[recommendation] 📊 分析完成: ${analysisResults.length} 个项目入选`)
+  } catch (error) {
+    console.error('[recommendation] 项目分析失败，回退到向量相似度排序:', error instanceof Error ? error.message : String(error))
+    analysisResults = candidateProjects.slice(0, recommendationLimit).map((project) => ({
+      repositoryId: project.repositoryId,
+      fullName: project.fullName,
+      totalScore: 0,
+      scores: {},
+      analysisReason: '分析失败，使用默认排序。',
+    }))
+  }
+
+  const selectedProjects = analysisResults
+    .map((result) => candidateProjects.find((project) => String(project.repositoryId) === String(result.repositoryId)))
+    .filter((project): project is GithubProject => Boolean(project))
+
+  return { ...input, analysisResults, selectedProjects }
+}
+
+export async function generateRecommendationReasonMap(input: RecommendationAnalysisResult): Promise<RecommendationReasonResult> {
+  const { selectedProjects, query, preference, recommendationLimit } = input
+
+  console.log(`[recommendation] 🤖 正在为 ${selectedProjects.length} 个项目生成推荐理由...`)
+  const reasons = await generateRecommendationReasons({ query, preference, recommendationLimit, candidateProjects: selectedProjects })
+  console.log(`[recommendation] 📝 推荐理由生成完成 (${Object.keys(reasons).length} 条)`)
+
+  return { ...input, reasons }
+}
+
+export function buildRecommendationResult({ query, recommendationLimit, progress, candidateProjects, analysisResults, selectedProjects, reasons }: RecommendationReasonResult): RecommendationWorkflowOutput {
+  if (progress.status !== 'ready') return { progress, recommendation: null, projects: [] }
 
   if (candidateProjects.length === 0) {
     console.log(`[recommendation] ⚠️ 无候选项目，结束推荐`)
@@ -59,37 +151,7 @@ export async function generateProjectRecommendations({ query, filters, recommend
     return { progress, recommendation, projects: [] }
   }
 
-  // AI 分析评分：从候选项目中筛选出最值得推荐的 N 个项目
-  console.log(`[recommendation] 📊 正在分析 ${candidateProjects.length} 个候选项目...`)
-  let analysisResults: AnalysisResult[]
-
-  try {
-    analysisResults = await analyzeCandidateProjects(candidateProjects, query, preference, recommendationLimit)
-    console.log(`[recommendation] 📊 分析完成: ${analysisResults.length} 个项目入选`)
-  } catch (error) {
-    console.error('[recommendation] 项目分析失败，回退到向量相似度排序:', error instanceof Error ? error.message : String(error))
-    // 分析失败时回退到向量相似度排序
-    analysisResults = candidateProjects.slice(0, recommendationLimit).map((project) => ({
-      repositoryId: project.repositoryId,
-      fullName: project.fullName,
-      totalScore: 0,
-      scores: {},
-      analysisReason: '分析失败，使用默认排序。',
-    }))
-  }
-
-  // 按分析得分顺序排列入选项目（LLM 返回的 repositoryId 可能是数字，统一转字符串比较）
-  const selectedProjects = analysisResults
-    .map((result) => candidateProjects.find((project) => String(project.repositoryId) === String(result.repositoryId)))
-    .filter((project): project is GithubProject => Boolean(project))
   const projectIds = selectedProjects.map((project) => project.repositoryId)
-
-  // 生成推荐理由
-  console.log(`[recommendation] 🤖 正在为 ${selectedProjects.length} 个项目生成推荐理由...`)
-  const reasons = await generateRecommendationReasons({ query, preference, recommendationLimit, candidateProjects: selectedProjects })
-  console.log(`[recommendation] 📝 推荐理由生成完成 (${Object.keys(reasons).length} 条)`)
-
-  // 组装评分数据，repositoryId → ProjectScore
   const scores: Record<string, { totalScore: number; dimensions: Record<string, number>; analysisReason: string }> = {}
   for (const result of analysisResults) {
     scores[String(result.repositoryId)] = {
@@ -121,21 +183,26 @@ export async function generateProjectRecommendations({ query, filters, recommend
   return { progress, recommendation, projects: candidateProjects }
 }
 
-// analyzeCandidateProjects 对候选项目进行 AI 分析评分，支持分批处理（每批最多 20 个），最后汇总取总分最高的 limit 个
-async function analyzeCandidateProjects(candidates: GithubProject[], query: string, preference: UserPreference, limit: number): Promise<AnalysisResult[]> {
-  // 单批：直接分析全部
-  if (candidates.length <= maxProjectsPerAnalysisBatch) {
-    return analyzeCandidateBatch(candidates, query, preference, limit)
-  }
+// 将“搜索 + 分析 + 生成理由”收束为一个推荐阶段，保留给非 workflow 调用复用
+export async function runRecommendationSearch(input: RecommendationWorkflowInput & { progress: RecommendationWorkflowOutput['progress'] }) {
+  const candidates = await searchRecommendationCandidates(input)
+  const analysis = await analyzeRecommendationCandidates(candidates)
+  const reasons = await generateRecommendationReasonMap(analysis)
 
-  // 分批：每批各自筛选，汇总后取全局 top N
+  return buildRecommendationResult(reasons)
+}
+
+// analyzeCandidateProjects 对候选项目进行 AI 分析评分，每批最多 10 个，按用户设置的并发数同时执行若干批
+async function analyzeCandidateProjects(candidates: GithubProject[], query: string, preference: UserPreference, limit: number): Promise<AnalysisResult[]> {
   const batches: GithubProject[][] = []
   for (let index = 0; index < candidates.length; index += maxProjectsPerAnalysisBatch) {
     batches.push(candidates.slice(index, index + maxProjectsPerAnalysisBatch))
   }
 
-  console.log(`[recommendation] 📊 候选项目超过 ${maxProjectsPerAnalysisBatch} 个，分 ${batches.length} 批分析`)
-  const batchResults = await Promise.all(batches.map((batch) => analyzeCandidateBatch(batch, query, preference, limit)))
+  console.log(`[recommendation] 📊 分析评分: ${candidates.length} 个项目分 ${batches.length} 批, 并发 ${preference.analysisConcurrency}`)
+  const batchResults = await runBatchWithConcurrency(batches, preference.analysisConcurrency, (batch) =>
+    analyzeCandidateBatch(batch, query, preference, Math.min(limit, batch.length)),
+  )
 
   const allResults = batchResults.flat()
   allResults.sort((left, right) => right.totalScore - left.totalScore)
@@ -145,10 +212,9 @@ async function analyzeCandidateProjects(candidates: GithubProject[], query: stri
 
 // analyzeCandidateBatch 对一批候选项目调用分析智能体进行评分
 async function analyzeCandidateBatch(candidates: GithubProject[], query: string, preference: UserPreference, selectCount: number): Promise<AnalysisResult[]> {
-  const agent = mastra.getAgent('projectAnalysisAgent')
   const userPrompt = buildAnalysisPrompt(candidates, query, preference, selectCount)
 
-  const result = await agent.generate(userPrompt, {
+  const result = await projectAnalysisAgent.generate(userPrompt, {
     modelSettings: {
       maxOutputTokens: 8192,
     },
@@ -182,22 +248,17 @@ async function analyzeCandidateBatch(candidates: GithubProject[], query: string,
   }
 }
 
-// buildAnalysisPrompt 构造项目分析智能体的用户提示词
+// buildAnalysisPrompt 构造项目分析智能体的用户提示词（评分框架在 instructions 中，此处只传项目数据）
 function buildAnalysisPrompt(candidates: GithubProject[], query: string, preference: UserPreference, selectCount: number): string {
   const domainsText = preference.domains.length > 0 ? preference.domains.join('、') : '无固定领域偏好'
   const candidateTexts = candidates.map((project, index) => buildProjectCard(project, index + 1))
-  const variables: Record<string, string> = {
-    candidateProjects: candidateTexts.join('\n\n'),
-    userQuery: query || '用户未填写具体需求，请基于领域偏好和项目质量评分。',
-    domainPreferences: domainsText,
-    recommendationLimit: String(selectCount),
-  }
-  let userPrompt = preference.projectAnalysisAgentPrompt
-  for (const [key, value] of Object.entries(variables)) {
-    userPrompt = userPrompt.replaceAll(`{{${key}}}`, value)
-  }
 
-  return userPrompt
+  return `用户需求：${query || '未填写'}
+领域偏好：${domainsText}
+选出 ${selectCount} 个最值得推荐的项目
+
+候选项目列表：
+${candidateTexts.join('\n\n')}`
 }
 
 // buildProjectCard 将单个项目格式化为分析提示词中的一段紧凑文本
@@ -263,70 +324,105 @@ async function resolveFreshVectorProjects(vectorResults: Array<{ repositoryId: s
 async function generateRecommendationReasons({ query, preference, recommendationLimit, candidateProjects }: { query: string; preference: UserPreference; recommendationLimit: number; candidateProjects: GithubProject[] }) {
   if (candidateProjects.length === 0) return {}
 
+  // 分批，每批最多 5 个项目
+  const batches: GithubProject[][] = []
+  for (let index = 0; index < candidateProjects.length; index += maxProjectsPerReasonBatch) {
+    batches.push(candidateProjects.slice(index, index + maxProjectsPerReasonBatch))
+  }
+
+  console.log(`[recommendation] 🤖 推荐理由: ${candidateProjects.length} 个项目分 ${batches.length} 批, 并发 ${preference.reasonConcurrency}`)
+
   try {
-    const agent = mastra.getAgent('projectRecommendationAgent')
-    const reasonEntries = await Promise.all(candidateProjects.map(async (project) => {
-      const result = await agent.generate(buildRecommendationReasonPrompt({ query, preference, recommendationLimit, project }), {
-        modelSettings: { maxOutputTokens: 320, temperature: 0.2 },
-      })
-      const reason = normalizeRecommendationReason(result.text, project, query)
-      return [project.repositoryId, reason] as const
-    }))
-    return Object.fromEntries(reasonEntries)
-  } catch {
+    const batchResults = await runBatchWithConcurrency(batches, preference.reasonConcurrency, (batch) =>
+      generateReasonsBatch(batch, query, preference, recommendationLimit),
+    )
+
+    return Object.fromEntries(batchResults.flat())
+  } catch (error) {
+    console.error('[recommendation] 推荐理由并发批处理失败:', error instanceof Error ? error.message : String(error))
     return Object.fromEntries(candidateProjects.map((project) => [project.repositoryId, buildFallbackRecommendationReason(project, query)]))
   }
 }
 
-function normalizeRecommendationReason(text: string | undefined, project: GithubProject, query: string) {
-  const reason = text?.trim()
-  return reason ? sanitizeRecommendationReason(reason) : buildFallbackRecommendationReason(project, query)
+// generateReasonsBatch 一次调用为一个批次的所有项目生成推荐理由
+async function generateReasonsBatch(projects: GithubProject[], query: string, preference: UserPreference, recommendationLimit: number): Promise<Array<[string, ProjectRecommendationReason]>> {
+  const userPrompt = buildBatchReasonPrompt(projects, query, preference, recommendationLimit)
+
+  const result = await projectRecommendationAgent.generate(userPrompt, {
+    modelSettings: { maxOutputTokens: 2048 },
+  })
+
+  const rawText = result.text ?? ''
+  console.log(`[recommendation] 📝 推荐理由智能体原始输出:\n${rawText}`)
+  const jsonText = extractJson(rawText)
+  console.log(`[recommendation] 📝 推荐理由 JSON 提取结果:\n${jsonText}`)
+
+  try {
+    const parsed = recommendationReasonsResponseSchema.parse(JSON.parse(jsonText))
+    console.log(`[recommendation] 📝 推荐理由 JSON 解析结果:\n${JSON.stringify(parsed, null, 2)}`)
+    const projectIds = new Set(projects.map((project) => String(project.repositoryId)))
+    const reasons = parsed.recommendations.filter((item) => projectIds.has(item.repositoryId))
+
+    if (reasons.length !== projects.length) {
+      throw new Error('推荐理由数量与项目数量不一致')
+    }
+
+    return reasons.map((item) => [item.repositoryId, item] as [string, ProjectRecommendationReason])
+  } catch (error) {
+    console.error('[recommendation] 推荐理由批处理解析失败:', error instanceof Error ? error.message : String(error))
+    // 解析失败时回退到逐个项目的兜底理由
+    return projects.map((project) => [project.repositoryId, buildFallbackRecommendationReason(project, query)] as [string, ProjectRecommendationReason])
+  }
 }
 
-function buildFallbackRecommendationReason(project: GithubProject, query: string) {
-  const profile = project.projectSummary ?? project.description
-  return sanitizeRecommendationReason(`${project.fullName} 适合“${query || '当前项目需求'}”。${profile}`)
-}
-
-function sanitizeRecommendationReason(reason: string) {
-  return reason.replace(/#{1,6}\s*/g, '').replace(/\*\*/g, '').replace(/```/g, '').replace(/^[-*]\s+/gm, '').trim().slice(0, recommendationReasonMaxLength)
-}
-
-function buildRecommendationReasonPrompt({ query, preference, recommendationLimit, project }: { query: string; preference: UserPreference; recommendationLimit: number; project: GithubProject }) {
+// buildBatchReasonPrompt 构造批处理推荐理由提示词
+function buildBatchReasonPrompt(projects: GithubProject[], query: string, preference: UserPreference, recommendationLimit: number): string {
   const domainsText = preference.domains.length > 0 ? preference.domains.join('、') : '无固定领域偏好'
-  const variables: Record<string, string> = {
-    domainPreferences: domainsText,
-    query: query || '用户未填写具体需求，请基于领域偏好推荐。',
-    projectFullName: project.fullName,
-    projectSummary: project.projectSummary ?? '暂无项目简介',
-    projectLanguage: project.language,
-    maturity: project.maturity,
-    stars: String(project.stars),
-    sourceGithubUsername: project.sourceGithubUsername,
+  const projectList = projects.map((project, index) => [
+    `项目 ${index + 1}：${project.fullName}`,
+    `   ID: ${project.repositoryId}`,
+    `   描述：${project.description}`,
+    `   项目简介：${project.projectSummary ?? '暂无项目简介'}`,
+    `   语言：${project.language}  Stars：${project.stars}  成熟度：${project.maturity}`,
+    `   来源：${project.sourceGithubUsername}  链接：${project.sourceUrl}`,
+  ].join('\n')).join('\n\n')
+
+  return `请为以下每个项目生成推荐卡片文案。
+
+用户需求：${query || '用户未填写具体需求'}
+领域偏好：${domainsText}
+总共推荐 ${recommendationLimit} 个项目中的 ${projects.length} 个
+
+${projectList}
+
+请只输出合法 JSON，不要使用 Markdown，不要输出解释文字。
+每个项目只输出 repositoryId、fitReasons、riskReminder。
+fitReasons 必须正好 3 条，每条尽量保持一行展示，不能带编号或项目符号。
+riskReminder 必须 1 条，尽量保持一行展示。
+不要输出项目名、简介、评分、GitHub 链接、上手路径或上手建议。
+
+JSON 格式：
+{
+  "recommendations": [
+    {
+      "repositoryId": "项目ID",
+      "fitReasons": ["能力匹配需求", "文档较完整", "方向符合偏好"],
+      "riskReminder": "维护活跃度待确认"
+    }
+  ]
+}`
+}
+
+function buildFallbackRecommendationReason(project: GithubProject, query: string): ProjectRecommendationReason {
+  return {
+    repositoryId: project.repositoryId,
+    fitReasons: [
+      '需求相关度高',
+      '项目信息完整',
+      query ? '匹配当前需求' : '适合继续评估',
+    ],
+    riskReminder: '维护状态需确认',
   }
-  let userPrompt = preference.recommendationAgentPrompt
-  for (const [key, value] of Object.entries(variables)) {
-    userPrompt = userPrompt.replaceAll(`{{${key}}}`, value)
-  }
-
-  return `${userPrompt}
-
-项目数据：
-仓库：${project.fullName}
-描述：${project.description}
-项目简介：${project.projectSummary ?? '暂无项目简介'}
-语言：${project.language}
-成熟度：${project.maturity}
-Stars：${project.stars}
-来源账号：${project.sourceGithubUsername}
-链接：${project.sourceUrl}
-推荐数量：${recommendationLimit} 个项目中选 1 个
-
-请只输出这个项目的推荐理由，不要返回 JSON，不要使用 Markdown，不要输出 ##、**、列表符号或代码块。每个字段之间必须用换行分隔。输出内容不超过 200 字，严格按照以下格式输出：
-推荐理由：
-适用场景：
-上手建议：
-风险提醒：`
 }
 
 function buildRecommendationFacts(projects: GithubProject[]) {
@@ -401,6 +497,22 @@ function findMatchingBrace(text: string, openIndex: number): number {
   }
 
   return -1
+}
+
+// runBatchWithConcurrency 并发执行批处理任务，最多 concurrency 个批次同时执行
+async function runBatchWithConcurrency<T, R>(batches: T[][], concurrency: number, processor: (batch: T[]) => Promise<R[]>): Promise<R[][]> {
+  const queue = batches.map((batch, index) => ({ batch, index }))
+  const results: R[][] = new Array(batches.length)
+  const workers = Array.from({ length: Math.min(concurrency, batches.length) })
+
+  await Promise.all(workers.map(async () => {
+    while (queue.length > 0) {
+      const item = queue.shift()!
+      results[item.index] = await processor(item.batch)
+    }
+  }))
+
+  return results
 }
 
 function buildRecommendationSuggestions(projects: GithubProject[]) {

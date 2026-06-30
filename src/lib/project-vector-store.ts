@@ -91,11 +91,9 @@ export async function searchProjectProfileVectors({ query, filters, limit }: Pro
   }
 }
 
-// 获取 Milvus 中所有已入库的 repositoryId 列表，用于与 PostgreSQL 对比找出未索引项目
+// 获取 Milvus 中所有已入库的 repositoryId 列表
 export async function getAllVectorRepositoryIds(): Promise<string[]> {
-  if (!process.env.MILVUS_ADDRESS) {
-    return []
-  }
+  if (!process.env.MILVUS_ADDRESS) return []
 
   try {
     const client = await getMilvusClient()
@@ -110,8 +108,28 @@ export async function getAllVectorRepositoryIds(): Promise<string[]> {
     return result.data.map((item) => String(item.repositoryId))
   } catch (error) {
     console.error('[project-vector-store] 查询向量库 repositoryId 列表失败:', error instanceof Error ? error.message : String(error))
-
     return []
+  }
+}
+
+// 获取 Milvus 中所有已入库的记录：repositoryId → profileHash，用于检测简介变更导致的过期向量
+export async function getAllVectorRecords(): Promise<Map<string, string>> {
+  if (!process.env.MILVUS_ADDRESS) return new Map()
+
+  try {
+    const client = await getMilvusClient()
+    await ensureProjectProfileCollection(client)
+    const result = await client.query({
+      collection_name: collectionName,
+      filter: 'repositoryId != ""',
+      output_fields: ['repositoryId', 'profileHash'],
+      limit: 10000,
+    })
+
+    return new Map(result.data.map((item) => [String(item.repositoryId), String(item.profileHash)]))
+  } catch (error) {
+    console.error('[project-vector-store] 查询向量库记录失败:', error instanceof Error ? error.message : String(error))
+    return new Map()
   }
 }
 

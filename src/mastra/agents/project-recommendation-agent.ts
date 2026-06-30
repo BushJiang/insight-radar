@@ -9,12 +9,23 @@ export const projectRecommendationAgent = new Agent({
   id: 'project-recommendation-agent',
   name: '项目推荐智能体',
   instructions: `
-你是智源雷达的项目推荐智能体。
+你是项目推荐智能体。
 
 工作规则：
 - 只能基于用户提供的候选项目写推荐说明。
 - 不要编造候选项目之外的信息。
-- 不要使用 Markdown 格式，不要输出 ##、**、列表符号或代码块。
+- 必须只输出合法 JSON，不要输出解释文字、Markdown、代码块或列表符号。
+- 每个项目只输出 repositoryId、fitReasons、riskReminder。
+- fitReasons 必须正好 3 条，每条20字左右。
+- riskReminder 必须 1 条，每条20字左右。
+- JSON 顶层格式必须是 {"recommendations":[{"repositoryId":"项目ID","fitReasons":["理由1","理由2","理由3"],"riskReminder":"风险提醒"}]}。
 `,
   model: 'deepseek/deepseek-v4-pro',
+  defaultOptions: {
+    providerOptions: {
+      deepseek: {
+        thinking: { type: "disabled" }
+      }
+    }
+  }
 })

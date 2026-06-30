@@ -1,30 +1,64 @@
-// POST /api/github/starred-search — 采集指定 GitHub 账号 Star 的项目并存入数据库
+// POST /api/github/starred-search — 采集 Star 项目：由 Mastra workflow 编排采集、保存和简介生成阶段
 import { ZodError } from 'zod'
-import { GithubApiError, searchGithubStarredProjects } from '@/lib/github-starred'
 import { handleZodError } from '@/lib/api-validation'
 import { resolveErrorMessage } from '@/lib/api-response'
-import { normalizePreference } from '@/lib/default-preference'
+import { createJsonLineSender, jsonLineResponseHeaders, resolveMastraWorkflowProgressStep } from '@/lib/mastra-workflow-stream'
+import { mastra } from '@/mastra'
 import { githubStarredSearchSchema } from '@/validations/api-schemas'
-import type { GithubStarredSearchResponse } from '@/types/insight-radar'
 
 export async function POST(req: Request) {
   try {
     const body = githubStarredSearchSchema.parse(await req.json())
-    const preference = normalizePreference(body.preference)
-    // 通过 GitHub GraphQL API 获取指定账号 Star 的项目，提取 README 并推断成熟度
-    const result = await searchGithubStarredProjects({
-      filters: body.filters,
-      githubToken: body.githubToken,
-      maxProjects: body.maxProjects,
-      preference,
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = createJsonLineSender(controller)
+
+        try {
+          const workflow = mastra.getWorkflow('githubStarCollectionWorkflow')
+          const run = await workflow.createRun()
+          const workflowStream = run.stream({
+            inputData: {
+              filters: body.filters,
+              githubToken: body.githubToken,
+              maxProjects: body.maxProjects,
+              preference: body.preference,
+            },
+          })
+          const emittedSteps = new Set<string>()
+
+          for await (const chunk of workflowStream) {
+            const step = resolveMastraWorkflowProgressStep(chunk, { collectRepositoryData: 'fetch_stars' })
+            if (step && !emittedSteps.has(step)) {
+              emittedSteps.add(step)
+              send({ type: 'progress', step })
+            }
+          }
+
+          const result = await workflowStream.result
+
+          if (result.status !== 'success') {
+            send({ type: 'error', error: '项目搜索失败，请稍后重试。' })
+            return
+          }
+
+          send({ type: 'result', ...result.result, error: null })
+        } catch (error) {
+          const message = resolveErrorMessage(error, '项目搜索失败，请稍后重试。')
+          send({ type: 'error', error: message })
+        } finally {
+          controller.close()
+        }
+      },
     })
 
-    return Response.json(result)
+    return new Response(stream, {
+      headers: jsonLineResponseHeaders,
+    })
   } catch (error) {
     if (error instanceof ZodError) return handleZodError(error)
-    const status = error instanceof GithubApiError ? error.status : 500
-    const message = resolveErrorMessage(error, '项目搜索失败，请稍后重试。')
-    const response: GithubStarredSearchResponse = {
+
+    return Response.json({
       projects: [],
       totalCount: 0,
       fetchedCount: 0,
@@ -34,9 +68,7 @@ export async function POST(req: Request) {
       estimatedTotalCount: null,
       rateLimitRemaining: null,
       rateLimitResetAt: null,
-      error: message,
-    }
-
-    return Response.json(response, { status })
+      error: '请求参数校验失败。',
+    }, { status: 400 })
   }
 }

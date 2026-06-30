@@ -13,7 +13,7 @@ export const projectProfileAgent = new Agent({
   id: 'project-profile-agent',
   name: '项目简介生成智能体',
   instructions: `
-你是智源雷达的项目简介生成智能体。
+你是项目简介生成智能体。
 
 工作规则：
 - 只基于用户提供的项目信息生成简介。

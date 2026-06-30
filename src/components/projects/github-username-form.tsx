@@ -75,19 +75,6 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
   const usernameFieldClassName = inline ? 'w-full rounded-xl border border-slate-300 bg-white px-4 text-sm leading-[20px] text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200' : 'mt-2 min-h-28 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-slate-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-white dark:text-black dark:disabled:bg-slate-200'
 
   useEffect(() => {
-    // 这个 useEffect 监听采集状态和弹窗开关；采集中且弹窗打开时启动节拍器，依赖变化或组件卸载时清理定时器
-    if (!isCollecting || !buildDialogOpen) {
-      return
-    }
-
-    const timer = window.setInterval(() => {
-      setBuildStepIndex((currentStep) => Math.min(currentStep + 1, 3))
-    }, 1600)
-
-    return () => window.clearInterval(timer)
-  }, [buildDialogOpen, isCollecting])
-
-  useEffect(() => {
     // 这个 useEffect 监听成功提示是否出现；显示后设置自动隐藏计时器，清理函数避免组件卸载后继续更新状态
     if (!successToastVisible) {
       return
@@ -181,7 +168,15 @@ export function GithubUsernameForm({ githubUsername, days, maxProjects, onGithub
 
         try {
           // 修改采集请求参数或返回处理时，继续看 collectGithubStarredProjects（components/projects/github-starred-request.ts）
-          const result = await collectGithubStarredProjects({ username, days, maxProjects: maxProjectsValue })
+          const result = await collectGithubStarredProjects({
+            username,
+            days,
+            maxProjects: maxProjectsValue,
+            onProgress: (step) => {
+              const stepMap: Record<string, number> = { fetch_stars: 0, fetch_details: 1, persist: 2, generate_profiles: 3 }
+              setBuildStepIndex(stepMap[step] ?? 0)
+            },
+          })
 
           fetchedCount += result.fetchedCount
           duplicateCount += result.duplicateCount

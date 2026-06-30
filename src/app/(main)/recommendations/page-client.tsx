@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { RecommendationExplanationCard } from '@/components/recommendations/recommendation-explanation-card'
 import { RecommendationRequestPanel } from '@/components/recommendations/recommendation-request-panel'
+import { RecommendationProgressDialog } from '@/components/recommendations/recommendation-progress-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
 import { ErrorMessage } from '@/components/shared/error-message'
 import { getDefaultPreference, normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
@@ -31,6 +32,10 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
   const [vectorStatus, setVectorStatus] = useState<VectorIndexStatus>(recommendationDraft.vectorStatus)
   const [vectorStatusLoaded, setVectorStatusLoaded] = useState(recommendationDraft.vectorStatusLoaded)
   const [syncingIndex, setSyncingIndex] = useState(false)
+  // 推荐进度弹窗状态
+  const [progressOpen, setProgressOpen] = useState(false)
+  const [progressStep, setProgressStep] = useState(0)
+  const [progressFailed, setProgressFailed] = useState(false)
 
   // 只在三种情况下查询向量索引状态：
   // 1. 首次访问（无缓存）
@@ -49,16 +54,14 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
       try {
         const result = await requestVectorStatus(filters)
         if (!cancelled) {
-          const nextStatus = result.vectorStatus ?? { indexedCount: 0, unindexedCount: 0, lastSyncAt: null }
+          const nextStatus = result.vectorStatus ?? { totalCount: 0, unprofiledCount: 0, indexedCount: 0, unindexedCount: 0, lastSyncAt: null }
           setVectorStatus(nextStatus)
           setVectorStatusLoaded(true)
           writeTransientRecommendationFormState({ vectorStatus: nextStatus, vectorStatusLoaded: true, vectorStatusFilters: { ...filters } })
         }
-      } catch {
-        if (!cancelled) {
-          setVectorStatusLoaded(true)
-          writeTransientRecommendationFormState({ vectorStatusLoaded: true, vectorStatusFilters: { ...filters } })
-        }
+      } catch (error) {
+        // API 失败时保持 loaded=false，卡片显示"加载中..."而非误导的"数据库为空"
+        console.error('[recommendation] 数据库状态查询失败:', error instanceof Error ? error.message : String(error))
       }
     }
 
@@ -67,7 +70,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     return () => {
       cancelled = true
     }
-  }, [filters])
+  }, [filters, recommendationDraft.vectorStatusFilters, vectorStatusLoaded])
 
   async function ensureSourcesLoaded() {
     if (sourcesLoaded) {
@@ -112,6 +115,9 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
     setLoading(true)
     setRecommending(true)
     setError(null)
+    setProgressOpen(true)
+    setProgressStep(0)
+    setProgressFailed(false)
 
     try {
       const response = await fetch('/api/recommendations', {
@@ -124,28 +130,65 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
           preference: normalizePreference(readBrowserStorage(preferenceStorageKey, getDefaultPreference())),
         }),
       })
-      const result = await response.json() as { progress: ProjectProfileProgress; recommendation: RecommendationExplanation | null; projects: GithubProject[]; error: string | null }
 
-      if (!response.ok || result.error) {
-        setError(result.error || '智能推荐失败，请稍后重试。')
+      if (!response.ok || !response.body) {
+        setProgressFailed(true)
+        setError('智能推荐失败，请稍后重试。')
         return
       }
 
-      if (result.progress.status !== 'ready') {
-        setError('请先更新数据库，再执行智能推荐。')
-        return
-      }
+      // 读取流式响应，每行一个 JSON 事件
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
 
-      if (result.projects.length > 0) {
-        setProjects(result.projects)
-        writeTransientRecommendationFormState({ projects: result.projects })
-      }
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
 
-      if (result.recommendation) {
-        setRecommendations([result.recommendation])
-        writeTransientRecommendationFormState({ recommendations: [result.recommendation], projects: result.projects })
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          const event = JSON.parse(line) as { type: string; step?: string; progress?: ProjectProfileProgress; recommendation?: RecommendationExplanation | null; projects?: GithubProject[]; error?: string | null }
+
+          if (event.type === 'progress' && event.step) {
+            const stepMap: Record<string, number> = { search: 0, analysis: 1, reasons: 2 }
+            setProgressStep(stepMap[event.step] ?? 0)
+          }
+
+          if (event.type === 'error') {
+            setProgressFailed(true)
+            setError(event.error ?? '智能推荐失败，请稍后重试。')
+            return
+          }
+
+          if (event.type === 'result') {
+            if (event.progress?.status !== 'ready') {
+              setProgressFailed(true)
+              setError(`项目简介未就绪 (${event.progress?.completedCount ?? 0}/${event.progress?.totalCount ?? 0})，请重试。`)
+              return
+            }
+
+            setProgressStep(3)
+            window.setTimeout(() => setProgressOpen(false), 2400)
+
+            if (event.projects && event.projects.length > 0) {
+              setProjects(event.projects)
+              writeTransientRecommendationFormState({ projects: event.projects })
+            }
+
+            if (event.recommendation) {
+              setRecommendations([event.recommendation])
+              writeTransientRecommendationFormState({ recommendations: [event.recommendation], projects: event.projects ?? [] })
+            }
+          }
+        }
       }
     } catch {
+      setProgressFailed(true)
       setError('智能推荐失败，请稍后重试。')
     } finally {
       setRecommending(false)
@@ -174,9 +217,9 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
       setRecommendations([])
       setSources([])
       setSourcesLoaded(false)
-      setVectorStatus({ indexedCount: 0, unindexedCount: 0, lastSyncAt: null })
+      setVectorStatus({ totalCount: 0, unprofiledCount: 0, indexedCount: 0, unindexedCount: 0, lastSyncAt: null })
       setVectorStatusLoaded(false)
-      writeTransientRecommendationFormState({ projects: [], recommendations: [], sources: [], sourcesLoaded: false, vectorStatus: { indexedCount: 0, unindexedCount: 0, lastSyncAt: null }, vectorStatusLoaded: false, vectorStatusFilters: null })
+      writeTransientRecommendationFormState({ projects: [], recommendations: [], sources: [], sourcesLoaded: false, vectorStatus: { totalCount: 0, unprofiledCount: 0, indexedCount: 0, unindexedCount: 0, lastSyncAt: null }, vectorStatusLoaded: false, vectorStatusFilters: null })
     } catch {
       setError('清空数据库失败，请稍后重试。')
     } finally {
@@ -190,7 +233,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
 
     try {
       const result = await requestSyncVectors(filters)
-      const nextStatus = result.vectorStatus ?? { indexedCount: 0, unindexedCount: 0, lastSyncAt: null }
+      const nextStatus = result.vectorStatus ?? { totalCount: 0, unprofiledCount: 0, indexedCount: 0, unindexedCount: 0, lastSyncAt: null }
       setVectorStatus(nextStatus)
       writeTransientRecommendationFormState({ vectorStatus: nextStatus, vectorStatusFilters: { ...filters } })
 
@@ -239,9 +282,16 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
           onSyncIndex={() => void handleSyncIndex()}
           onClearData={() => void handleClearData()}
           syncingIndex={syncingIndex}
-          canSyncIndex={vectorStatus.unindexedCount > 0}
+          canSyncIndex={vectorStatus.unprofiledCount > 0 || vectorStatus.unindexedCount > 0}
         />
         <VectorIndexStatusCard vectorStatus={vectorStatus} loaded={vectorStatusLoaded} />
+        <RecommendationProgressDialog
+          open={progressOpen}
+          stepIndex={progressStep}
+          failed={progressFailed}
+          errorMessage={error}
+          onClose={() => setProgressOpen(false)}
+        />
         {error ? <ErrorMessage message={error} /> : null}
       </section>
 
@@ -319,28 +369,37 @@ function VectorIndexStatusCard({ vectorStatus, loaded }: { vectorStatus: VectorI
     )
   }
 
-  if (vectorStatus.indexedCount === 0 && vectorStatus.unindexedCount === 0) {
-    return null
-  }
+  const hasUnprofiled = vectorStatus.unprofiledCount > 0
+  const hasUnindexed = vectorStatus.unindexedCount > 0
+  const allReady = !hasUnprofiled && !hasUnindexed
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-slate-700 dark:text-slate-200">数据库状态</span>
-        {vectorStatus.lastSyncAt ? (
+        {vectorStatus.totalCount > 0 && vectorStatus.lastSyncAt ? (
           <span className="text-sm text-slate-500 dark:text-slate-400">
             最后更新：{new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(vectorStatus.lastSyncAt))}
           </span>
-        ) : (
-          <span className="text-sm text-slate-400 dark:text-slate-500">尚未更新</span>
-        )}
+        ) : null}
       </div>
-      {vectorStatus.unindexedCount > 0 ? (
-        <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
-          有 {vectorStatus.unindexedCount} 个项目未更新，推荐结果可能不完整
-        </p>
+      {vectorStatus.totalCount === 0 ? (
+        <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">数据库为空，请先采集项目</p>
+      ) : allReady ? (
+        <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">{vectorStatus.totalCount} 个项目全部就绪</p>
       ) : (
-        <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">所有项目已更新</p>
+        <div className="mt-1 space-y-0.5">
+          {hasUnprofiled ? (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              缺少简介：{vectorStatus.unprofiledCount} 个
+            </p>
+          ) : null}
+          {hasUnindexed ? (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              缺少向量：{vectorStatus.unindexedCount} 个
+            </p>
+          ) : null}
+        </div>
       )}
     </div>
   )

@@ -37,6 +37,7 @@ export interface GithubProject {
   pushedAt: string | null
   projectSummary: string | null
   readmeContent: string | null
+  readmeHash: string | null
   topics: string[]
   license: string | null
   isFork: boolean
@@ -70,9 +71,11 @@ export interface UserPreference {
   id: string
   domains: string[]
   recommendationAgentPrompt: string
-  projectAnalysisAgentPrompt: string
   projectProfileAgentPrompt: string
   candidateMultiplier: number
+  profileConcurrency: number
+  analysisConcurrency: number
+  reasonConcurrency: number
   updatedAt: string
 }
 
@@ -82,11 +85,17 @@ export interface ProjectScore {
   analysisReason: string
 }
 
+export interface ProjectRecommendationReason {
+  repositoryId: string
+  fitReasons: [string, string, string]
+  riskReminder: string
+}
+
 export interface RecommendationExplanation {
   id: string
   projectIds: string[]
   query: string
-  reasons: Record<string, string>
+  reasons: Record<string, ProjectRecommendationReason>
   scores: Record<string, ProjectScore>
   facts: string[]
   inferences: string[]
@@ -104,6 +113,8 @@ export interface RecommendationPageState {
 }
 
 export interface VectorIndexStatus {
+  totalCount: number
+  unprofiledCount: number
   indexedCount: number
   unindexedCount: number
   lastSyncAt: string | null

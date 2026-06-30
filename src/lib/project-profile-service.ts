@@ -1,6 +1,7 @@
 // 项目简介服务：并发生成/重新生成项目 AI 简介（Mastra Agent + deepseek-v4-flash），写入 projects.readme_summary
-import { mastra } from '@/mastra'
-import { getAllVectorRepositoryIds, getLastIndexedAt, upsertProjectProfileVectors } from '@/lib/project-vector-store'
+import { projectProfileAgent } from '@/mastra/agents/project-profile-agent'
+import { getAllVectorRecords, getLastIndexedAt, upsertProjectProfileVectors } from '@/lib/project-vector-store'
+import { buildProfileHash } from '@/lib/project-profile-hash'
 import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, searchProjectsFromDatabase, updateProjectProfile } from '@/lib/projects-repository'
 import { stripHtml } from '@/lib/utils'
 import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference, VectorIndexStatus } from '@/types/insight-radar'
@@ -11,9 +12,13 @@ const projectProfileMaxLength = 280
 const maxGeneratedProfilesPerRequest = 20
 // 单个 AI 生成调用超时（毫秒），超时后 Promise.race 抛出异常，上层 per-item catch 接住跳过
 const aiGenerateTimeoutMs = 30_000
-// 同批内并发 AI 调用数。不超过 maxGeneratedProfilesPerRequest，避免 Node 连接池瓶颈
-const aiGenerateConcurrency = 10
 const vectorUpsertTimeoutMs = Number(process.env.PROJECT_PROFILE_VECTOR_UPSERT_TIMEOUT_MS || 30_000)
+
+export interface ProjectProfileReadinessResult {
+  progress: ProjectProfileProgress
+  syncedCount: number
+  profiledCount: number
+}
 
 // 检查并生成缺失的项目简介（推荐前自动调用）。一次最多生成 20 个
 export async function ensureProjectProfiles(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileProgress> {
@@ -131,7 +136,8 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
   const savedProjects: GithubProject[] = []
   const pendingProjects = projects.filter((project) => force || !project.projectSummary?.trim())
 
-  console.log(`[project-profile] 🤖 正在为 ${pendingProjects.length} 个项目生成 AI 简介...`)
+  // 每批 1 个项目，独立生成简介，并发数由用户在设置页控制
+  console.log(`[project-profile] 🤖 正在为 ${pendingProjects.length} 个项目生成 AI 简介（并发 ${preference.profileConcurrency}）...`)
   const tasks = pendingProjects.map((project) => async () => {
     try {
       const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
@@ -142,7 +148,7 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
     }
   })
 
-  const workers = Array.from({ length: aiGenerateConcurrency })
+  const workers = Array.from({ length: preference.profileConcurrency })
   await Promise.all(workers.map(async () => {
     while (tasks.length > 0) {
       const task = tasks.shift()
@@ -154,41 +160,70 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
   return savedProjects
 }
 
-// 查询向量索引状态：有多少项目有简介但未向量化，以及最后同步时间
+// 查询数据库状态：项目总数、无简介数、已向量化数（含 hash 校验）、未向量化数
 export async function getVectorIndexStatus(filters: ProjectSearchFilters): Promise<VectorIndexStatus> {
-  const [projectsWithProfiles, vectorIds] = await Promise.all([
+  const [allProjects, vectorRecords] = await Promise.all([
     listProjectsForProfileRegeneration({ ...filters, excludeRepositoryIds: [], limit: 10000 }),
-    getAllVectorRepositoryIds(),
+    getAllVectorRecords(),
   ])
 
-  const projects = projectsWithProfiles.filter((project) => project.projectSummary?.trim())
-  const vectorIdSet = new Set(vectorIds)
-  const indexedCount = projects.filter((project) => vectorIdSet.has(project.repositoryId)).length
-  const unindexedCount = projects.length - indexedCount
+  const unprofiledCount = allProjects.filter((project) => !project.projectSummary?.trim()).length
+  const profiledProjects = allProjects.filter((project) => project.projectSummary?.trim())
+  // 不仅检查 ID 是否存在，还验证 profileHash 是否匹配
+  let indexedCount = 0
+  let unindexedCount = 0
+
+  for (const project of profiledProjects) {
+    const storedHash = vectorRecords.get(project.repositoryId)
+    if (!storedHash) {
+      unindexedCount++
+    } else if (storedHash !== buildProfileHash(project)) {
+      unindexedCount++
+    } else {
+      indexedCount++
+    }
+  }
+
   const lastIndexedAt = await getLastIndexedAt()
 
   return {
+    totalCount: allProjects.length,
+    unprofiledCount,
     indexedCount,
     unindexedCount,
     lastSyncAt: lastIndexedAt ? new Date(lastIndexedAt).toISOString() : null,
   }
 }
 
-// 找出所有有简介但未向量化的项目，生成向量并写入 Milvus
-export async function syncUnindexedProjectVectors(filters: ProjectSearchFilters): Promise<VectorIndexStatus & { syncedCount: number }> {
+// 更新数据库：先生成缺失的项目简介，再将所有有简介但未向量化的项目写入 Milvus
+export async function syncUnindexedProjectVectors(filters: ProjectSearchFilters, preference?: UserPreference): Promise<VectorIndexStatus & { syncedCount: number; profiledCount: number }> {
   const status = await getVectorIndexStatus(filters)
+  let profiledCount = 0
 
-  if (status.unindexedCount === 0) {
-    return { ...status, syncedCount: 0 }
+  // 有项目缺少简介时，优先调用 AI 生成简介
+  if (status.unprofiledCount > 0 && preference) {
+    console.log(`[project-profile] 📝 有 ${status.unprofiledCount} 个项目缺少简介，先生成...`)
+    const profileResult = await ensureProjectProfiles(filters, preference)
+    profiledCount = profileResult.completedCount
+  }
+
+  // 向量化所有有简介但未入库的项目
+  if (status.unindexedCount === 0 && profiledCount === 0) {
+    return { ...status, syncedCount: 0, profiledCount: 0 }
   }
 
   const allProjects = await listProjectsForProfileRegeneration({ ...filters, excludeRepositoryIds: [], limit: 10000 })
-  const vectorIds = await getAllVectorRepositoryIds()
-  const vectorIdSet = new Set(vectorIds)
-  const unindexedProjects = allProjects.filter((project) => project.projectSummary?.trim() && !vectorIdSet.has(project.repositoryId))
+  const vectorRecords = await getAllVectorRecords()
+  const unindexedProjects = allProjects.filter((project) => {
+    if (!project.projectSummary?.trim()) return false
+    const storedHash = vectorRecords.get(project.repositoryId)
+    if (!storedHash) return true
+    return storedHash !== buildProfileHash(project)
+  })
 
   if (unindexedProjects.length === 0) {
-    return { ...status, syncedCount: 0 }
+    const newStatus = await getVectorIndexStatus(filters)
+    return { ...newStatus, syncedCount: 0, profiledCount }
   }
 
   console.log(`[project-profile] 🧬 同步推荐索引: ${unindexedProjects.length} 个项目待入库`)
@@ -202,7 +237,18 @@ export async function syncUnindexedProjectVectors(filters: ProjectSearchFilters)
 
   const newStatus = await getVectorIndexStatus(filters)
 
-  return { ...newStatus, syncedCount: unindexedProjects.length }
+  return { ...newStatus, syncedCount: unindexedProjects.length, profiledCount }
+}
+
+export async function ensureProjectProfileReadinessForRecommendation(filters: ProjectSearchFilters, preference: UserPreference): Promise<ProjectProfileReadinessResult> {
+  const syncResult = await syncUnindexedProjectVectors(filters, preference)
+  const progress = await getProjectProfileStatus(filters)
+
+  return {
+    progress,
+    syncedCount: syncResult.syncedCount,
+    profiledCount: syncResult.profiledCount,
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
@@ -234,8 +280,7 @@ export async function getProjectProfileStatus(filters: ProjectSearchFilters): Pr
 //   提前中止 → result.text 为空 → 触发兜底"暂无项目简介。"。
 //   1024 只是"预算管够"，模型实际仍按 prompt 中的"不超过 200 字"输出，不会写满 1024。
 async function generateProjectProfile(project: GithubProject, prompt: string) {
-  const agent = mastra.getAgent('projectProfileAgent')
-  const generatePromise = agent.generate(buildProjectProfilePrompt(project, prompt), {
+  const generatePromise = projectProfileAgent.generate(buildProjectProfilePrompt(project, prompt), {
     modelSettings: {
       maxOutputTokens: 1024,
       temperature: 0.2,
@@ -287,7 +332,7 @@ function buildProjectProfilePrompt(project: GithubProject, prompt: string) {
     projectName: project.name,
     repositoryFullName: project.fullName,
     projectDescription: project.description,
-    primaryLanguage: project.language,
+    projectLanguage: project.language,
     readme,
   }
   let userPrompt = prompt

@@ -6,7 +6,7 @@ export const projectAnalysisAgent = new Agent({
   id: 'project-analysis-agent',
   name: '项目分析智能体',
   instructions: `
-你是智源雷达的开源项目推荐专家。根据用户需求对候选项目逐一评分，选出最值得推荐的项目。
+你是项目分析智能体。请根据用户需求对候选项目逐一评分，选出最值得推荐的项目。
 
 评分规则（每个维度 0-5 分，总分 5 分）：
 
@@ -52,5 +52,13 @@ export const projectAnalysisAgent = new Agent({
   ]
 }
 `,
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-v4-pro',
+  // 在调用时传递给模型提供商的额外配置参数，用于控制模型的行为（如是否开启思考模式）
+  defaultOptions: {
+    providerOptions: {
+      deepseek: {
+        thinking: { type: "disabled" }
+      }
+    }
+  }
 })

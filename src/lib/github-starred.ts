@@ -1,7 +1,8 @@
 // GitHub Star 采集：GraphQL API 分页拉取 Star 仓库 + REST API 取 README + 推断成熟度 + 去重写入 DB
+import { createHash } from 'crypto'
 import { normalizePreference } from '@/lib/default-preference'
 import { generateAndSaveMissingProjectProfiles } from '@/lib/project-profile-service'
-import { persistCollectedProjects, searchProjectsFromDatabase } from '@/lib/projects-repository'
+import { persistCollectedProjects, searchProjectsFromDatabase, type PersistProjectsResult } from '@/lib/projects-repository'
 import { stripHtml } from '@/lib/utils'
 import type { GithubProject, GithubStarredSearchResponse, ProjectMaturity, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
@@ -83,62 +84,129 @@ interface GraphqlStarredResponse {
   errors?: Array<{ message: string }>
 }
 
-interface SearchGithubStarredProjectsOptions {
+export interface GithubStarCollectionInput {
   filters: ProjectSearchFilters
   githubToken?: string
   maxProjects?: number
   preference?: Partial<UserPreference>
 }
 
-// 通过 GitHub GraphQL API 获取指定账号 Star 的项目列表，提取 README 并推断成熟度
-export async function searchGithubStarredProjects({ filters, githubToken, maxProjects, preference }: SearchGithubStarredProjectsOptions): Promise<GithubStarredSearchResponse> {
-  const username = filters.sourceGithubUsername?.trim()
+export interface GithubStarCollectionPreparedInput extends GithubStarCollectionInput {
+  username: string
+  normalizedPreference: UserPreference
+}
+
+export interface GithubStarRepositoryData extends GithubStarCollectionPreparedInput {
+  edges: GraphqlStarredEdge[]
+  totalCount: number | null
+}
+
+export interface GithubStarPersistedData extends GithubStarRepositoryData {
+  collectedProjects: GithubProject[]
+  persistedResult: PersistProjectsResult
+}
+
+export type GithubStarProfileData = GithubStarPersistedData
+
+type GithubStarCollectionProgressStep = 'fetch_stars' | 'fetch_details' | 'persist' | 'generate_profiles'
+
+type GithubStarCollectionProgressReporter = (step: GithubStarCollectionProgressStep) => void | Promise<void>
+
+interface SearchGithubStarredProjectsOptions extends GithubStarCollectionInput {
+  onProgress?: GithubStarCollectionProgressReporter
+}
+
+// 准备采集请求：后续步骤只关心已清洗过的用户名和完整偏好配置
+export function prepareGithubStarCollectionInput(input: GithubStarCollectionInput): GithubStarCollectionPreparedInput {
+  const username = input.filters.sourceGithubUsername?.trim()
 
   if (!username) {
     throw new GithubApiError('请输入来源账号后再搜索。', 400)
   }
 
-  const { edges, totalCount } = await fetchStarredReposViaGraphql(username, filters.days, maxProjects ?? defaultMaxFetchedRepositories, githubToken?.trim())
+  return {
+    ...input,
+    username,
+    normalizedPreference: normalizePreference(input.preference),
+  }
+}
+
+// 通过 GitHub GraphQL API 获取指定账号 Star 的项目列表，提取 README 并推断成熟度
+export async function searchGithubStarredProjects({ filters, githubToken, maxProjects, preference, onProgress }: SearchGithubStarredProjectsOptions): Promise<GithubStarredSearchResponse> {
+  const preparedInput = prepareGithubStarCollectionInput({ filters, githubToken, maxProjects, preference })
+
+  await onProgress?.('fetch_stars')
+  const repositoryData = await collectGithubStarRepositoryData(preparedInput)
+  const persistedData = await persistGithubStarCollection(repositoryData, onProgress)
+  const profileData = await prepareGithubStarProjectProfiles(persistedData, onProgress)
+
+  return buildGithubStarCollectionResult(profileData)
+}
+
+// 采集阶段：统一封装 Star 列表和 README 获取，对下游只输出仓库数据
+export async function collectGithubStarRepositoryData(input: GithubStarCollectionPreparedInput): Promise<GithubStarRepositoryData> {
+  const { edges, totalCount } = await fetchStarredReposViaGraphql(input.username, input.filters.days, input.maxProjects ?? defaultMaxFetchedRepositories, input.githubToken?.trim())
   console.log(`[github-starred] ✅ 采集到 ${edges.length} 个项目信息`)
-  const collectedProjects = await Promise.all(edges.map((edge) => mapRepoEdgeToProject(edge, username, githubToken?.trim())))
+
+  return { ...input, edges, totalCount }
+}
+
+// 持久化阶段：统一封装字段映射、成熟度推断、去重写库和结果统计
+export async function persistGithubStarCollection(input: GithubStarRepositoryData, onProgress?: GithubStarCollectionProgressReporter): Promise<GithubStarPersistedData> {
+  await onProgress?.('fetch_details')
+  const collectedProjects = await Promise.all(input.edges.map((edge) => mapRepoEdgeToProject(edge, input.username, input.githubToken?.trim())))
+  await onProgress?.('persist')
   console.log(`[github-starred] 📄 正在将 ${collectedProjects.length} 个项目写入数据库...`)
   const persistedResult = await persistCollectedProjects(collectedProjects)
   console.log(`[github-starred] 💾 数据库写入完成 (新增 ${persistedResult.createdProjects.length}, 更新 ${persistedResult.updatedDuplicateCount}, 未变 ${persistedResult.unchangedDuplicateCount})`)
+
+  return { ...input, collectedProjects, persistedResult }
+}
+
+// 画像准备阶段：生成缺失项目简介，失败不阻断采集结果返回
+export async function prepareGithubStarProjectProfiles(input: GithubStarPersistedData, onProgress?: GithubStarCollectionProgressReporter): Promise<GithubStarProfileData> {
+  await onProgress?.('generate_profiles')
   console.log(`[github-starred] 🤖 正在生成项目简介...`)
-  await generateProfilesAfterCollection(collectedProjects, preference)
-  const projects = filters.query.trim()
+  await generateProfilesAfterCollection(input.collectedProjects, input.normalizedPreference)
+
+  return input
+}
+
+// 结果阶段：把内部采集数据整理成前端已有响应结构
+export async function buildGithubStarCollectionResult(input: GithubStarProfileData): Promise<GithubStarredSearchResponse> {
+  const projects = input.filters.query.trim()
     ? (await searchProjectsFromDatabase({
-      query: filters.query,
-      languages: filters.languages,
-      maturity: filters.maturity,
-      sourceGithubUsername: filters.sourceGithubUsername,
-      days: filters.days,
+      query: input.filters.query,
+      languages: input.filters.languages,
+      maturity: input.filters.maturity,
+      sourceGithubUsername: input.filters.sourceGithubUsername,
+      days: input.filters.days,
       page: 1,
-      pageSize: edges.length || 1,
+      pageSize: input.edges.length || 1,
     })).projects
-    : collectedProjects
+    : input.collectedProjects
 
   return {
     projects,
     totalCount: projects.length,
-    fetchedCount: edges.length,
-    duplicateCount: persistedResult.duplicateCount,
-    updatedDuplicateCount: persistedResult.updatedDuplicateCount,
-    unchangedDuplicateCount: persistedResult.unchangedDuplicateCount,
-    estimatedTotalCount: totalCount,
+    fetchedCount: input.edges.length,
+    duplicateCount: input.persistedResult.duplicateCount,
+    updatedDuplicateCount: input.persistedResult.updatedDuplicateCount,
+    unchangedDuplicateCount: input.persistedResult.unchangedDuplicateCount,
+    estimatedTotalCount: input.totalCount,
     rateLimitRemaining: null,
     rateLimitResetAt: null,
     error: null,
   }
 }
 
-async function generateProfilesAfterCollection(projects: GithubProject[], preference: Partial<UserPreference> | undefined) {
+async function generateProfilesAfterCollection(projects: GithubProject[], preference: UserPreference) {
   if (projects.length === 0) {
     return
   }
 
   try {
-    await generateAndSaveMissingProjectProfiles(projects, normalizePreference(preference))
+    await generateAndSaveMissingProjectProfiles(projects, preference)
   } catch (error) {
     console.error('[github-starred] 采集后项目简介生成失败:', error instanceof Error ? error.message : String(error))
   }
@@ -219,8 +287,9 @@ async function mapRepoEdgeToProject(edge: GraphqlStarredEdge, username: string, 
     pushedAt: node.pushedAt,
     projectSummary: null,
     readmeContent,
-    topics: node.repositoryTopics.nodes.map((n) => n.topic.name),
+    readmeHash: readmeContent ? createHash('sha256').update(readmeContent).digest('hex') : null,
     license: node.licenseInfo?.spdxId || node.licenseInfo?.name || null,
+    topics: node.repositoryTopics.nodes.map((n) => n.topic.name),
     isFork: node.isFork,
     sourceRepositoryFullName: sourceRepository?.nameWithOwner ?? null,
     sourceRepositoryUrl: sourceRepository?.url ?? null,

@@ -60,7 +60,7 @@ const defaultTransientFormState: TransientFormState = {
     projects: [],
     sources: [],
     sourcesLoaded: false,
-    vectorStatus: { indexedCount: 0, unindexedCount: 0, lastSyncAt: null },
+    vectorStatus: { totalCount: 0, unprofiledCount: 0, indexedCount: 0, unindexedCount: 0, lastSyncAt: null },
     vectorStatusLoaded: false,
     vectorStatusFilters: null,
   },

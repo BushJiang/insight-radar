@@ -21,9 +21,11 @@ export const userPreferenceSchema = z.object({
   id: z.string(),
   domains: z.array(z.string()).default([]),
   recommendationAgentPrompt: z.string().default(''),
-  projectAnalysisAgentPrompt: z.string().default(''),
   projectProfileAgentPrompt: z.string().default(''),
   candidateMultiplier: z.number().int().refine((value) => [2, 4, 8, 16].includes(value), { message: '候选池倍数必须是 2、4、8 或 16' }).default(4),
+  profileConcurrency: z.number().int().refine((value) => [10, 20, 40, 80, 160, 320].includes(value), { message: '简介生成并发数必须是 10、20、40、80、160 或 320' }).default(20),
+  analysisConcurrency: z.number().int().refine((value) => [2, 4, 8, 16].includes(value), { message: '分析评分并发数必须是 2、4、8 或 16' }).default(2),
+  reasonConcurrency: z.number().int().refine((value) => [2, 4, 8, 16].includes(value), { message: '推荐理由并发数必须是 2、4、8 或 16' }).default(2),
   updatedAt: z.string(),
 })
 

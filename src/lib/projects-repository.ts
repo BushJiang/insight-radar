@@ -65,6 +65,18 @@ export async function persistCollectedProjects(collectedProjects: GithubProject[
     duplicateCount += 1
     const changedValues = getChangedProjectValues(existingProject, nextRecord)
 
+    // README 没变 → 回填已有简介到内存对象，后续 generateAndSaveMissingProjectProfiles 会自动跳过
+    if (existingProject.projectSummary?.trim() && existingProject.readmeHash === nextRecord.readmeHash) {
+      project.projectSummary = existingProject.projectSummary
+      project.readmeHash = existingProject.readmeHash
+    }
+
+    // README 变了 → 清空数据库中的简介，让后续流程重新生成
+    if (nextRecord.readmeHash && existingProject.readmeHash !== nextRecord.readmeHash && existingProject.projectSummary?.trim()) {
+      changedValues.readmeHash = nextRecord.readmeHash
+      changedValues.projectSummary = null
+    }
+
     if (Object.keys(changedValues).length === 0) {
       unchangedDuplicateCount += 1
       continue
@@ -269,6 +281,7 @@ function toProjectRecord(project: GithubProject): typeof projects.$inferInsert {
     pushedAt: project.pushedAt ? new Date(project.pushedAt) : null,
     githubUpdatedAt: new Date(project.githubUpdatedAt ?? project.updatedAt),
     readmeContent: project.readmeContent,
+		readmeHash: project.readmeHash ?? null,
     projectSummary: project.projectSummary,
     matchReason: project.matchReason,
     maturity: project.maturity,
@@ -326,6 +339,7 @@ export function toGithubProject(project: typeof projects.$inferSelect): GithubPr
     pushedAt: project.pushedAt?.toISOString() ?? null,
     projectSummary: project.projectSummary,
     readmeContent: project.readmeContent,
+    readmeHash: project.readmeHash ?? null,
     topics: project.topics,
     license: project.license,
     isFork: project.isFork,

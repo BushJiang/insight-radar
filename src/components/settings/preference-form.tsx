@@ -2,12 +2,13 @@
 'use client'
 
 import { useState } from 'react'
-import { normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
+import { getDefaultPreference, normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
 import { readBrowserStorage, writeBrowserStorage } from '@/lib/browser-storage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import type { UserPreference } from '@/types/insight-radar'
 
 interface PreferenceFormProps {
@@ -152,33 +153,6 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">保存后会写入浏览器本地存储，采集 GitHub Star 项目时自动使用。</p>
       </PreferenceCard>
 
-      <PreferenceCard title="项目分析提示词">
-        <Textarea
-          value={preference.projectAnalysisAgentPrompt}
-          onChange={(event) => updatePreference({ projectAnalysisAgentPrompt: event.target.value })}
-          placeholder="请输入项目分析提示词"
-        />
-        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{candidateProjects}}'}（候选项目列表）、{'{{userQuery}}'}（用户需求）、{'{{domainPreferences}}'}（领域偏好）、{'{{recommendationLimit}}'}（推荐数量）。</p>
-      </PreferenceCard>
-
-      <PreferenceCard title="项目推荐提示词">
-        <Textarea
-          value={preference.recommendationAgentPrompt}
-          onChange={(event) => updatePreference({ recommendationAgentPrompt: event.target.value })}
-          placeholder="请输入项目推荐提示词"
-        />
-        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{domainPreferences}}'}（领域偏好）、{'{{query}}'}（用户需求）、{'{{projectFullName}}'}（仓库全名）、{'{{projectSummary}}'}（项目简介）、{'{{projectLanguage}}'}（主要语言）、{'{{maturity}}'}（项目成熟度）、{'{{stars}}'}（Stars 数量）、{'{{sourceGithubUsername}}'}（来源账号）。</p>
-      </PreferenceCard>
-
-      <PreferenceCard title="项目简介提示词">
-        <Textarea
-          value={preference.projectProfileAgentPrompt}
-          onChange={(event) => updatePreference({ projectProfileAgentPrompt: event.target.value })}
-          placeholder="请输入项目简介提示词"
-        />
-        <p className="text-sm text-slate-500 dark:text-slate-400">可用变量：{'{{projectName}}'}（项目名称）、{'{{repositoryFullName}}'}（仓库全名）、{'{{projectDescription}}'}（项目描述）、{'{{primaryLanguage}}'}（主要语言）、{'{{readme}}'}（README 内容）。</p>
-      </PreferenceCard>
-
       <PreferenceCard title="候选池倍数">
         <Select value={String(preference.candidateMultiplier)} onValueChange={(value) => updatePreference({ candidateMultiplier: Number(value) })}>
           <SelectTrigger className="mt-2 w-48">
@@ -190,7 +164,56 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
             ))}
           </SelectContent>
         </Select>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">候选池 = 推荐数量 × 倍数。倍数越大搜索范围越广，不增加 AI 调用成本。</p>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">候选池项目数量 = 推荐数量 × 候选池倍数。候选池倍数越大，搜索范围越广，但是消耗 token 越多。</p>
+      </PreferenceCard>
+
+      <PreferenceCard title="并发数设置">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <ConcurrencySelect
+            id="profile-concurrency"
+            label="简介生成并发数"
+            value={preference.profileConcurrency}
+            options={[10, 20, 40, 80, 160, 320]}
+            onChange={(val) => updatePreference({ profileConcurrency: val })}
+          />
+          <ConcurrencySelect
+            id="analysis-concurrency"
+            label="分析评分并发数"
+            value={preference.analysisConcurrency}
+            options={[2, 4, 8, 16]}
+            onChange={(val) => updatePreference({ analysisConcurrency: val })}
+          />
+          <ConcurrencySelect
+            id="reason-concurrency"
+            label="推荐理由并发数"
+            value={preference.reasonConcurrency}
+            options={[2, 4, 8, 16]}
+            onChange={(val) => updatePreference({ reasonConcurrency: val })}
+          />
+        </div>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">并发数越大，执行速度越快，消耗 token 越多。</p>
+      </PreferenceCard>
+
+      <PreferenceCard
+        title="项目简介提示词"
+        action={<Button type="button" size="sm" onClick={() => updatePreference({ projectProfileAgentPrompt: getDefaultPreference().projectProfileAgentPrompt })} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">恢复默认</Button>}
+      >
+        <Textarea
+          value={preference.projectProfileAgentPrompt}
+          onChange={(event) => updatePreference({ projectProfileAgentPrompt: event.target.value })}
+          placeholder="请输入项目简介提示词"
+        />
+      </PreferenceCard>
+
+      <PreferenceCard
+        title="项目推荐提示词"
+        action={<Button type="button" size="sm" onClick={() => updatePreference({ recommendationAgentPrompt: getDefaultPreference().recommendationAgentPrompt })} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">恢复默认</Button>}
+      >
+        <Textarea
+          value={preference.recommendationAgentPrompt}
+          onChange={(event) => updatePreference({ recommendationAgentPrompt: event.target.value })}
+          placeholder="请输入项目推荐提示词"
+        />
       </PreferenceCard>
 
       <div className="min-h-20">
@@ -212,11 +235,12 @@ interface PreferenceCardProps {
   children: React.ReactNode
 }
 
-function PreferenceCard({ title, children }: PreferenceCardProps) {
+function PreferenceCard({ title, children, action }: PreferenceCardProps & { action?: React.ReactNode }) {
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{title}</h2>
+        {action}
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         {children}
@@ -273,6 +297,25 @@ function OtherInput({ label, checked, value, onCheckedChange, onValueChange }: O
         className="sm:max-w-sm"
         placeholder="请输入其他偏好"
       />
+    </div>
+  )
+}
+
+// 并发数下拉选择框
+function ConcurrencySelect({ id, label, value, options, onChange }: { id: string; label: string; value: number; options: number[]; onChange: (val: number) => void }) {
+  return (
+    <div>
+      <Label htmlFor={id} className="text-sm">{label}</Label>
+      <Select value={String(value)} onValueChange={(val) => onChange(Number(val))}>
+        <SelectTrigger id={id} className="mt-2 w-48">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option} value={String(option)}>{option}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
