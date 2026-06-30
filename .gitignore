@@ -1,5 +1,6 @@
 # ===== Claude Code =====
 .claude/
+CLAUDE.md
 
 # ===== Bun & Node.js =====
 node_modules/
@@ -13,15 +14,11 @@ build/
 out/
 tsconfig.tsbuildinfo
 
-# ===== Local services =====
-volumes/milvus/
-
 # ===== OS files =====
 .DS_Store
 Thumbs.db
 
 # ===== Environment & Secrets =====
-.env
 .env
 .env.*.local
 *.pem
@@ -32,6 +29,15 @@ Thumbs.db
 coverage/
 *.lcov
 
+# ===== milvus_data =====
+volumes/
+milvus_data/
+embedEtcd.yaml
+user.yaml
+
+# ===== mastra =====
+.mastra
+
 # ===== Temporary files =====
 tmp/
 temp/
@@ -39,4 +45,8 @@ temp/
 *.bak
 
 # ===== Others =====
-resource
+resource/
+docs/
+notes/
+.42cog/
+.42plugin.yml
