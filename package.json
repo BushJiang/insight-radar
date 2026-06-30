@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:mastra": "mastra dev",
+    "db:init": "bun --env-file=.env scripts/init-db.ts",
     "build": "next build",
     "build:mastra": "mastra build",
     "start": "next start",
