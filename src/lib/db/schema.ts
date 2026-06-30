@@ -1,7 +1,7 @@
-// 数据库 Schema：projects 单表定义（28 字段），Drizzle ORM + PostgreSQL。uniqueIndex 防止仓库重复插入
+// 数据库 Schema：projects 与用户设置表定义，Drizzle ORM + PostgreSQL。
 import { sql } from 'drizzle-orm'
 import { index, boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core'
-import type { ProjectMaturity } from '@/types/insight-radar'
+import type { ProjectMaturity, UserPreference } from '@/types/insight-radar'
 
 export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
@@ -42,3 +42,16 @@ export const projects = pgTable('projects', {
 
 export type ProjectRecord = typeof projects.$inferSelect
 export type NewProjectRecord = typeof projects.$inferInsert
+
+export const appSettings = pgTable('app_settings', {
+  id: text('id').primaryKey(),
+  githubToken: text('github_token'),
+  deepseekApiKey: text('deepseek_api_key'),
+  siliconFlowApiKey: text('siliconflow_api_key'),
+  preference: jsonb('preference').$type<UserPreference>(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export type AppSettingsRecord = typeof appSettings.$inferSelect
+export type NewAppSettingsRecord = typeof appSettings.$inferInsert

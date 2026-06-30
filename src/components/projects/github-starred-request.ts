@@ -22,7 +22,6 @@ export async function collectGithubStarredProjects({ username, days, maxProjects
         sourceGithubUsername: username,
         days: days === 'all' ? null : Number(days),
       },
-      githubToken: readBrowserStorage('insight-radar-github-token', '') || undefined,
       maxProjects,
       preference: readBrowserStorage(preferenceStorageKey, getDefaultPreference()),
     }),

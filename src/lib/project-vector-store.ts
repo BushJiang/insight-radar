@@ -3,6 +3,8 @@ import { embedProjectProfileQuery, embedProjectProfileTexts, getProjectProfileEm
 import { buildProfileHash } from '@/lib/project-profile-hash'
 import type { GithubProject, ProjectSearchFilters } from '@/types/insight-radar'
 
+const logPrefix = '[project-vector-store] '
+
 interface ProjectVectorSearchOptions {
   query: string
   filters: ProjectSearchFilters
@@ -27,12 +29,12 @@ export async function upsertProjectProfileVectors(projects: GithubProject[]) {
     return
   }
 
-  console.log(`[project-vector-store] 🧬 正在为 ${projectsWithProfiles.length} 个项目生成向量 (模型: ${getProjectProfileEmbeddingModel()})...`)
+  console.log(`${logPrefix}🧬 正在为 ${projectsWithProfiles.length} 个项目生成向量 (模型: ${getProjectProfileEmbeddingModel()})...`)
   const profileTexts = projectsWithProfiles.map(buildProjectProfileEmbeddingText)
   const profileVectors = await embedProjectProfileTexts(profileTexts)
-  console.log(`[project-vector-store] 🧬 向量生成完成 (${profileVectors.length} 条, 维度: ${getProjectProfileVectorDimension()})`)
+  console.log(`${logPrefix}🧬 向量生成完成 (${profileVectors.length} 条, 维度: ${getProjectProfileVectorDimension()})`)
 
-  console.log(`[project-vector-store] 📥 正在写入 Milvus 集合 ${collectionName}...`)
+  console.log(`${logPrefix}📥 正在写入 Milvus 集合 ${collectionName}...`)
   const client = await getMilvusClient()
 
   await ensureProjectProfileCollection(client)
@@ -52,7 +54,7 @@ export async function upsertProjectProfileVectors(projects: GithubProject[]) {
       indexedAt: Date.now(),
     })),
   })
-  console.log(`[project-vector-store] 📥 Milvus 写入完成 (${projectsWithProfiles.length} 条)`)
+  console.log(`${logPrefix}📥 Milvus 写入完成 (${projectsWithProfiles.length} 条)`)
   await client.refreshLoad({ collection_name: collectionName })
 }
 
@@ -66,8 +68,10 @@ export async function searchProjectProfileVectors({ query, filters, limit }: Pro
   try {
     const client = await getMilvusClient()
     await ensureProjectProfileCollection(client)
+    console.log(`${logPrefix}开始生成查询向量: queryLength=${query.trim().length}, limit=${limit}`)
     // 把用户需求文本转成向量，后续用它在项目简介向量集合里做相似度搜索
     const queryVector = await embedProjectProfileQuery(query)
+    console.log(`${logPrefix}查询向量生成成功: dimension=${queryVector.length}`)
     const result = await client.search({
       collection_name: collectionName,
       data: [queryVector],
@@ -79,13 +83,15 @@ export async function searchProjectProfileVectors({ query, filters, limit }: Pro
       output_fields: ['repositoryId', 'language', 'sourceGithubUsername', 'maturity', 'githubUpdatedAt', 'stars', 'profileHash'],
     })
 
+    console.log(`${logPrefix}Milvus search 返回: resultCount=${result.results.length}`)
+
     return result.results.map((item) => ({
       repositoryId: String(item.repositoryId),
       score: Number(item.score ?? 0),
       profileHash: String(item.profileHash ?? ''),
     }))
   } catch (error) {
-    console.error('[project-vector-store] 项目简介向量搜索失败:', error instanceof Error ? error.message : String(error))
+    console.error(`${logPrefix}项目简介向量搜索失败:`, error instanceof Error ? error.message : String(error))
 
     return []
   }
@@ -107,7 +113,7 @@ export async function getAllVectorRepositoryIds(): Promise<string[]> {
 
     return result.data.map((item) => String(item.repositoryId))
   } catch (error) {
-    console.error('[project-vector-store] 查询向量库 repositoryId 列表失败:', error instanceof Error ? error.message : String(error))
+    console.error(`${logPrefix}查询向量库 repositoryId 列表失败:`, error instanceof Error ? error.message : String(error))
     return []
   }
 }
@@ -128,7 +134,7 @@ export async function getAllVectorRecords(): Promise<Map<string, string>> {
 
     return new Map(result.data.map((item) => [String(item.repositoryId), String(item.profileHash)]))
   } catch (error) {
-    console.error('[project-vector-store] 查询向量库记录失败:', error instanceof Error ? error.message : String(error))
+    console.error(`${logPrefix}查询向量库记录失败:`, error instanceof Error ? error.message : String(error))
     return new Map()
   }
 }
@@ -155,7 +161,7 @@ export async function getLastIndexedAt(): Promise<number | null> {
 
     return Math.max(...result.data.map((item) => Number(item.indexedAt ?? 0)))
   } catch (error) {
-    console.error('[project-vector-store] 查询最后同步时间失败:', error instanceof Error ? error.message : String(error))
+    console.error(`${logPrefix}查询最后同步时间失败:`, error instanceof Error ? error.message : String(error))
 
     return null
   }

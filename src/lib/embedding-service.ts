@@ -1,3 +1,7 @@
+import { getRuntimeApiKeys } from '@/lib/app-settings-service'
+
+const logPrefix = '[embedding-service] '
+
 interface SiliconFlowEmbeddingResponse {
   data?: Array<{
     embedding?: unknown
@@ -65,7 +69,10 @@ export async function embedProjectProfileQuery(query: string) {
 }
 
 async function requestEmbeddings(input: string[]) {
-  const apiKey = process.env.SILICONFLOW_API_KEY
+  const apiKeys = await getRuntimeApiKeys()
+  const savedApiKey = apiKeys.siliconFlowApiKey.trim()
+  const envApiKey = process.env.SILICONFLOW_API_KEY?.trim() ?? ''
+  const apiKey = savedApiKey || envApiKey
 
   if (!apiKey) {
     throw new Error('缺少 SILICONFLOW_API_KEY，无法生成项目简介向量。')
@@ -73,8 +80,11 @@ async function requestEmbeddings(input: string[]) {
 
   const baseUrl = (process.env.SILICONFLOW_BASE_URL || defaultSiliconFlowBaseUrl).replace(/\/$/, '')
   const timeoutMs = Number(process.env.PROJECT_PROFILE_EMBEDDING_TIMEOUT_MS || defaultEmbeddingTimeoutMs)
+  const model = getProjectProfileEmbeddingModel()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  console.log(`${logPrefix}请求 SiliconFlow embeddings: baseUrl=${baseUrl}, model=${model}, inputCount=${input.length}, apiKeySource=${savedApiKey ? 'database' : 'env'}, timeoutMs=${timeoutMs}`)
 
   try {
     const response = await fetch(`${baseUrl}/embeddings`, {
@@ -84,14 +94,15 @@ async function requestEmbeddings(input: string[]) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: getProjectProfileEmbeddingModel(),
+        model,
         input,
       }),
       signal: controller.signal,
     })
 
     if (!response.ok) {
-      throw new Error(`SiliconFlow embedding 请求失败：HTTP ${response.status}`)
+      const errorBody = await response.text().catch(() => '')
+      throw new Error(`SiliconFlow embedding 请求失败：HTTP ${response.status}${errorBody ? `，响应：${errorBody.slice(0, 300)}` : ''}`)
     }
 
     const payload = await response.json() as SiliconFlowEmbeddingResponse
@@ -109,6 +120,7 @@ async function requestEmbeddings(input: string[]) {
       throw new Error(`SiliconFlow embedding 请求超时：${timeoutMs}ms。`)
     }
 
+    console.error(`${logPrefix}SiliconFlow embeddings 请求异常: ${error instanceof Error ? error.message : String(error)}`)
     throw error
   } finally {
     clearTimeout(timeout)

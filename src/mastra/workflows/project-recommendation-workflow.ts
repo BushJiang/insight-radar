@@ -16,27 +16,31 @@ const recommendationProgressSchema = z.object({
   message: z.string().nullable(),
 })
 
+const preferenceSchema = z.object({
+  id: z.string(),
+  domains: z.array(z.string()),
+  recommendationAgentPrompt: z.string(),
+  projectProfileAgentPrompt: z.string(),
+  candidateMultiplier: z.number(),
+  profileConcurrency: z.number(),
+  analysisConcurrency: z.number(),
+  reasonConcurrency: z.number(),
+  updatedAt: z.string(),
+})
+
+const filtersSchema = z.object({
+  query: z.string(),
+  languages: z.array(z.string()),
+  maturity: z.array(z.enum(['early', 'growth', 'mature', 'stalled'])),
+  sourceGithubUsername: z.string().nullable(),
+  days: z.number().nullable(),
+})
+
 const recommendationWorkflowInputSchema = z.object({
   query: z.string(),
-  filters: z.object({
-    query: z.string(),
-    languages: z.array(z.string()),
-    maturity: z.array(z.enum(['early', 'growth', 'mature', 'stalled'])),
-    sourceGithubUsername: z.string().nullable(),
-    days: z.number().nullable(),
-  }),
+  filters: filtersSchema,
   recommendationLimit: z.number().int().min(1).max(50),
-  preference: z.object({
-    id: z.string(),
-    domains: z.array(z.string()),
-    recommendationAgentPrompt: z.string(),
-    projectProfileAgentPrompt: z.string(),
-    candidateMultiplier: z.number(),
-    profileConcurrency: z.number(),
-    analysisConcurrency: z.number(),
-    reasonConcurrency: z.number(),
-    updatedAt: z.string(),
-  }),
+  preference: preferenceSchema,
 })
 
 const githubProjectSchema = z.custom<GithubProject>()
@@ -117,14 +121,15 @@ const readinessStep = createStep({
   outputSchema: z.object({
     progress: recommendationProgressSchema,
     query: z.string(),
-    filters: recommendationWorkflowInputSchema.shape.filters,
+    filters: filtersSchema,
     recommendationLimit: z.number().int().min(1).max(50),
-    preference: recommendationWorkflowInputSchema.shape.preference,
+    preference: preferenceSchema,
     ready: z.boolean(),
   }),
   execute: async ({ inputData, writer }) => {
     await writer?.write({ type: 'progress', step: 'readiness' })
     const readiness = await ensureRecommendationReadiness(inputData.filters, inputData.preference)
+
     return {
       progress: readiness.progress,
       query: inputData.query,
@@ -143,9 +148,9 @@ const searchStep = createStep({
   inputSchema: z.object({
     progress: recommendationProgressSchema,
     query: z.string(),
-    filters: recommendationWorkflowInputSchema.shape.filters,
+    filters: filtersSchema,
     recommendationLimit: z.number().int().min(1).max(50),
-    preference: recommendationWorkflowInputSchema.shape.preference,
+    preference: preferenceSchema,
     ready: z.boolean(),
   }),
   outputSchema: recommendationCandidateSearchSchema,
@@ -162,6 +167,7 @@ const searchStep = createStep({
     }
 
     await writer?.write({ type: 'progress', step: 'search' })
+
     return searchRecommendationCandidates({
       query: inputData.query,
       filters: inputData.filters,
@@ -184,6 +190,7 @@ const analysisStep = createStep({
     }
 
     await writer?.write({ type: 'progress', step: 'analysis' })
+
     return analyzeRecommendationCandidates({
       ...inputData,
       candidateProjects: toGithubProjects(inputData.candidateProjects),
@@ -203,6 +210,7 @@ const reasonsStep = createStep({
     }
 
     await writer?.write({ type: 'progress', step: 'reasons' })
+
     return generateRecommendationReasonMap(toAnalysisServiceInput(inputData))
   },
 })

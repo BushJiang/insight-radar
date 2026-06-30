@@ -21,7 +21,7 @@ export interface CollectionJob {
   rateLimitResetAt: string | null
 }
 
-export interface GithubProject {
+export interface GithubProject extends Record<string, unknown> {
   id?: string
   repositoryId: string
   fullName: string
@@ -159,9 +159,13 @@ export interface CollectionProgress {
   errorMessage: string | null
 }
 
-export interface UserSettings {
+export interface UserApiKeys {
   githubToken: string
+  deepseekApiKey: string
+  siliconFlowApiKey: string
 }
+
+export type UserSettings = UserApiKeys
 
 export interface HomeMetrics {
   projectCount: number

@@ -1,7 +1,7 @@
 // POST /api/recommendations — 智能推荐：由 Mastra workflow 编排推荐阶段，并继续按行流式返回前端进度
 import { ZodError } from 'zod'
 import { handleZodError } from '@/lib/api-validation'
-import { normalizePreference } from '@/lib/default-preference'
+import { getRuntimePreference } from '@/lib/app-settings-service'
 import { createJsonLineSender, jsonLineResponseHeaders, resolveMastraWorkflowProgressStep } from '@/lib/mastra-workflow-stream'
 import { mastra } from '@/mastra'
 import { recommendationRequestSchema } from '@/validations/api-schemas'
@@ -9,7 +9,7 @@ import { recommendationRequestSchema } from '@/validations/api-schemas'
 export async function POST(req: Request) {
   try {
     const body = recommendationRequestSchema.parse(await req.json())
-    const preference = normalizePreference(body.preference)
+    const preference = await getRuntimePreference(body.preference)
 
     const stream = new ReadableStream({
       async start(controller) {

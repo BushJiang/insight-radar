@@ -29,9 +29,19 @@ export const userPreferenceSchema = z.object({
   updatedAt: z.string(),
 })
 
+export const userApiKeysSchema = z.object({
+  githubToken: z.string().optional(),
+  deepseekApiKey: z.string().optional(),
+  siliconFlowApiKey: z.string().optional(),
+})
+
+export const appSettingsSchema = z.object({
+  preference: userPreferenceSchema.partial().optional(),
+  apiKeys: userApiKeysSchema.partial().optional(),
+})
+
 export const githubStarredSearchSchema = z.object({
   filters: projectSearchFiltersSchema,
-  githubToken: z.string().optional(),
   maxProjects: z.number().int().min(0).optional(),
   preference: userPreferenceSchema.partial().optional(),
 })

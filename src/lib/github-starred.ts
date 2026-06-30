@@ -6,6 +6,8 @@ import { persistCollectedProjects, searchProjectsFromDatabase, type PersistProje
 import { stripHtml } from '@/lib/utils'
 import type { GithubProject, GithubStarredSearchResponse, ProjectMaturity, ProjectSearchFilters, UserPreference } from '@/types/insight-radar'
 
+const logPrefix = '[github-starred] '
+
 const githubStarredPageSize = 100
 const defaultMaxFetchedRepositories = 500
 const githubGraphqlEndpoint = 'https://api.github.com/graphql'
@@ -49,9 +51,10 @@ query($username: String!, $first: Int!, $after: String) {
 }`
 
 // GraphQL 响应类型
-interface GraphqlStarredEdge {
+interface GraphqlStarredEdge extends Record<string, unknown> {
   starredAt: string
   node: {
+    [key: string]: unknown
     databaseId: number
     name: string
     nameWithOwner: string
@@ -128,6 +131,7 @@ export function prepareGithubStarCollectionInput(input: GithubStarCollectionInpu
     ...input,
     username,
     normalizedPreference: normalizePreference(input.preference),
+    githubToken: input.githubToken,
   }
 }
 
@@ -146,7 +150,7 @@ export async function searchGithubStarredProjects({ filters, githubToken, maxPro
 // 采集阶段：统一封装 Star 列表和 README 获取，对下游只输出仓库数据
 export async function collectGithubStarRepositoryData(input: GithubStarCollectionPreparedInput): Promise<GithubStarRepositoryData> {
   const { edges, totalCount } = await fetchStarredReposViaGraphql(input.username, input.filters.days, input.maxProjects ?? defaultMaxFetchedRepositories, input.githubToken?.trim())
-  console.log(`[github-starred] ✅ 采集到 ${edges.length} 个项目信息`)
+  console.log(`${logPrefix}✅ 采集到 ${edges.length} 个项目信息`)
 
   return { ...input, edges, totalCount }
 }
@@ -156,9 +160,9 @@ export async function persistGithubStarCollection(input: GithubStarRepositoryDat
   await onProgress?.('fetch_details')
   const collectedProjects = await Promise.all(input.edges.map((edge) => mapRepoEdgeToProject(edge, input.username, input.githubToken?.trim())))
   await onProgress?.('persist')
-  console.log(`[github-starred] 📄 正在将 ${collectedProjects.length} 个项目写入数据库...`)
+  console.log(`${logPrefix}📄 正在将 ${collectedProjects.length} 个项目写入数据库...`)
   const persistedResult = await persistCollectedProjects(collectedProjects)
-  console.log(`[github-starred] 💾 数据库写入完成 (新增 ${persistedResult.createdProjects.length}, 更新 ${persistedResult.updatedDuplicateCount}, 未变 ${persistedResult.unchangedDuplicateCount})`)
+  console.log(`${logPrefix}💾 数据库写入完成 (新增 ${persistedResult.createdProjects.length}, 更新 ${persistedResult.updatedDuplicateCount}, 未变 ${persistedResult.unchangedDuplicateCount})`)
 
   return { ...input, collectedProjects, persistedResult }
 }
@@ -166,7 +170,7 @@ export async function persistGithubStarCollection(input: GithubStarRepositoryDat
 // 画像准备阶段：生成缺失项目简介，失败不阻断采集结果返回
 export async function prepareGithubStarProjectProfiles(input: GithubStarPersistedData, onProgress?: GithubStarCollectionProgressReporter): Promise<GithubStarProfileData> {
   await onProgress?.('generate_profiles')
-  console.log(`[github-starred] 🤖 正在生成项目简介...`)
+  console.log(`${logPrefix}🤖 正在生成项目简介...`)
   await generateProfilesAfterCollection(input.collectedProjects, input.normalizedPreference)
 
   return input
@@ -208,7 +212,7 @@ async function generateProfilesAfterCollection(projects: GithubProject[], prefer
   try {
     await generateAndSaveMissingProjectProfiles(projects, preference)
   } catch (error) {
-    console.error('[github-starred] 采集后项目简介生成失败:', error instanceof Error ? error.message : String(error))
+    console.error(`${logPrefix}采集后项目简介生成失败:`, error instanceof Error ? error.message : String(error))
   }
 }
 

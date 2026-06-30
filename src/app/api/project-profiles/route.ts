@@ -1,6 +1,6 @@
 // POST /api/project-profiles — 项目简介管理（status 查询 / generate 生成 / regenerate 重新生成 / vector-status 索引状态 / sync-vectors 同步索引）
 import { resolveErrorMessage } from '@/lib/api-response'
-import { normalizePreference } from '@/lib/default-preference'
+import { getRuntimePreference } from '@/lib/app-settings-service'
 import { generateMissingProjectProfiles, getProjectProfileStatus, getVectorIndexStatus, regenerateProjectProfiles, syncUnindexedProjectVectors } from '@/lib/project-profile-service'
 import type { GithubProject, ProjectMaturity, ProjectProfileProgress, ProjectSearchFilters, UserPreference, VectorIndexStatus } from '@/types/insight-radar'
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json() as ProjectProfilesRequestBody
     const filters = resolveProjectProfileFilters(body)
-    const preference = normalizePreference(body.preference)
+    const preference = await getRuntimePreference(body.preference)
     const handler = actionHandlers[body.action] ?? handleGenerate
     const response = await handler({ body, filters, preference })
 

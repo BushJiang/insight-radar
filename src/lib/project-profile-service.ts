@@ -3,8 +3,11 @@ import { projectProfileAgent } from '@/mastra/agents/project-profile-agent'
 import { getAllVectorRecords, getLastIndexedAt, upsertProjectProfileVectors } from '@/lib/project-vector-store'
 import { buildProfileHash } from '@/lib/project-profile-hash'
 import { countProjectsForFilters, countProjectsMissingProfiles, listProjectsForProfileRegeneration, listProjectsMissingProfiles, searchProjectsFromDatabase, updateProjectProfile } from '@/lib/projects-repository'
+import { resolveDeepSeekModel } from '@/lib/server-api-keys'
 import { stripHtml } from '@/lib/utils'
 import type { GithubProject, ProjectProfileProgress, ProjectSearchFilters, UserPreference, VectorIndexStatus } from '@/types/insight-radar'
+
+const logPrefix = '[project-profile-service] '
 
 // 项目简介最终截断上限（字符数），DB 字段 readme_summary 为 varchar(300)
 const projectProfileMaxLength = 280
@@ -137,14 +140,14 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
   const pendingProjects = projects.filter((project) => force || !project.projectSummary?.trim())
 
   // 每批 1 个项目，独立生成简介，并发数由用户在设置页控制
-  console.log(`[project-profile] 🤖 正在为 ${pendingProjects.length} 个项目生成 AI 简介（并发 ${preference.profileConcurrency}）...`)
+  console.log(`${logPrefix}🤖 正在为 ${pendingProjects.length} 个项目生成 AI 简介（并发 ${preference.profileConcurrency}）...`)
   const tasks = pendingProjects.map((project) => async () => {
     try {
       const profile = await generateProjectProfile(project, preference.projectProfileAgentPrompt)
       await updateProjectProfile(project.repositoryId, profile)
       savedProjects.push({ ...project, projectSummary: profile })
     } catch (error) {
-      console.error(`[project-profile] 项目简介生成失败 ${project.repositoryId}:`, error instanceof Error ? error.message : String(error))
+      console.error(`${logPrefix}项目简介生成失败 ${project.repositoryId}:`, error instanceof Error ? error.message : String(error))
     }
   })
 
@@ -155,7 +158,7 @@ async function generateAndSaveProjectProfiles(projects: GithubProject[], prefere
       if (task) await task()
     }
   }))
-  console.log(`[project-profile] 📝 项目简介生成完成 (成功 ${savedProjects.length}/${pendingProjects.length})`)
+  console.log(`${logPrefix}📝 项目简介生成完成 (成功 ${savedProjects.length}/${pendingProjects.length})`)
 
   return savedProjects
 }
@@ -202,7 +205,7 @@ export async function syncUnindexedProjectVectors(filters: ProjectSearchFilters,
 
   // 有项目缺少简介时，优先调用 AI 生成简介
   if (status.unprofiledCount > 0 && preference) {
-    console.log(`[project-profile] 📝 有 ${status.unprofiledCount} 个项目缺少简介，先生成...`)
+    console.log(`${logPrefix}📝 有 ${status.unprofiledCount} 个项目缺少简介，先生成...`)
     const profileResult = await ensureProjectProfiles(filters, preference)
     profiledCount = profileResult.completedCount
   }
@@ -226,12 +229,12 @@ export async function syncUnindexedProjectVectors(filters: ProjectSearchFilters,
     return { ...newStatus, syncedCount: 0, profiledCount }
   }
 
-  console.log(`[project-profile] 🧬 同步推荐索引: ${unindexedProjects.length} 个项目待入库`)
+  console.log(`${logPrefix}🧬 同步推荐索引: ${unindexedProjects.length} 个项目待入库`)
   try {
     await withTimeout(upsertProjectProfileVectors(unindexedProjects), vectorUpsertTimeoutMs)
-    console.log(`[project-profile] 🧬 同步推荐索引完成: ${unindexedProjects.length} 个项目已入库`)
+    console.log(`${logPrefix}🧬 同步推荐索引完成: ${unindexedProjects.length} 个项目已入库`)
   } catch (error) {
-    console.error('[project-profile] 同步推荐索引失败:', error instanceof Error ? error.message : String(error))
+    console.error(`${logPrefix}同步推荐索引失败:`, error instanceof Error ? error.message : String(error))
     throw error
   }
 
@@ -285,6 +288,7 @@ async function generateProjectProfile(project: GithubProject, prompt: string) {
       maxOutputTokens: 1024,
       temperature: 0.2,
     },
+    model: await resolveDeepSeekModel('deepseek-v4-flash'),
   })
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`AI 生成超时 (${project.repositoryId})`)), aiGenerateTimeoutMs),
@@ -293,9 +297,9 @@ async function generateProjectProfile(project: GithubProject, prompt: string) {
   const result = await Promise.race([generatePromise, timeoutPromise])
 
   if (!result.text?.trim()) {
-    console.warn(`[project-profile] AI 返回空文本: ${project.fullName}`)
-    console.warn(`[project-profile] result.text 类型: ${typeof result.text}, 值: ${JSON.stringify(result.text)}`)
-    console.warn(`[project-profile] result 键: ${Object.keys(result).join(', ')}`)
+    console.warn(`${logPrefix}AI 返回空文本: ${project.fullName}`)
+    console.warn(`${logPrefix}result.text 类型: ${typeof result.text}, 值: ${JSON.stringify(result.text)}`)
+    console.warn(`${logPrefix}result 键: ${Object.keys(result).join(', ')}`)
   }
 
   const profile = resolveProjectProfile(result.text)

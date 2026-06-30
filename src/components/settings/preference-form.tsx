@@ -1,18 +1,18 @@
-// 用户偏好表单：领域选择 + 推荐/简介提示词模板 + 候选池倍数，数据保存到 localStorage。设置页使用
+// 用户偏好表单：API 密钥状态、推荐偏好、执行参数和提示词模板，数据保存到服务端设置表。设置页使用
 'use client'
 
 import { useState } from 'react'
-import { getDefaultPreference, normalizePreference, preferenceStorageKey } from '@/lib/default-preference'
-import { readBrowserStorage, writeBrowserStorage } from '@/lib/browser-storage'
+import { getDefaultPreference, normalizePreference } from '@/lib/default-preference'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import type { UserPreference } from '@/types/insight-radar'
+import type { UserApiKeys, UserPreference } from '@/types/insight-radar'
 
 interface PreferenceFormProps {
   initialPreference: UserPreference
+  initialApiKeyStatus: Record<keyof UserApiKeys, boolean>
 }
 
 interface PreferenceFormState {
@@ -23,25 +23,23 @@ interface PreferenceFormState {
 
 const unlimitedDomain = '不限领域'
 const domains = [unlimitedDomain, '智能体', '前端', '后端', '数据库', 'AI 工具', '开发工具', '基础设施']
-const githubTokenStorageKey = 'insight-radar-github-token'
+const emptyApiKeys: UserApiKeys = { githubToken: '', deepseekApiKey: '', siliconFlowApiKey: '' }
 
-// 用户设置表单，编辑领域偏好、推荐提示词、项目简介提示词，数据存 localStorage
-export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
-  const [savedState, setSavedState] = useState<PreferenceFormState>(() => {
-    const saved = readBrowserStorage(preferenceStorageKey, null)
-
-    return {
-      preference: saved ? normalizePreference(saved) : normalizePreference(initialPreference),
-      otherDomainEnabled: false,
-      otherDomain: '',
-    }
-  })
-  const [githubToken, setGithubToken] = useState(() => readBrowserStorage(githubTokenStorageKey, ''))
+// 用户设置表单，编辑领域偏好、API 密钥、执行参数和提示词模板，数据存服务端设置表
+export function PreferenceForm({ initialPreference, initialApiKeyStatus }: PreferenceFormProps) {
+  const [savedState, setSavedState] = useState<PreferenceFormState>(() => ({
+    preference: normalizePreference(initialPreference),
+    otherDomainEnabled: false,
+    otherDomain: '',
+  }))
+  const [apiKeyStatus, setApiKeyStatus] = useState(initialApiKeyStatus)
+  const [apiKeyDrafts, setApiKeyDrafts] = useState<UserApiKeys>(emptyApiKeys)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const { preference, otherDomainEnabled, otherDomain } = savedState
-  const githubTokenMask = githubToken ? '*'.repeat(githubToken.length) : ''
 
-  function saveSettings() {
+  async function saveSettings() {
     const trimmedOtherDomain = otherDomain.trim()
     const nextDomains = preference.domains.includes(unlimitedDomain)
       ? []
@@ -55,15 +53,35 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
       updatedAt: new Date().toISOString(),
     })
 
-    writeBrowserStorage(preferenceStorageKey, nextPreference)
-    writeBrowserStorage(githubTokenStorageKey, githubToken.trim())
-    setGithubToken(githubToken.trim())
-    setSavedState({
-      preference: nextPreference,
-      otherDomainEnabled,
-      otherDomain: trimmedOtherDomain,
-    })
-    setSaved(true)
+    setSaving(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preference: nextPreference, apiKeys: apiKeyDrafts }),
+      })
+      const result = await response.json() as { preference?: UserPreference; apiKeyStatus?: Record<keyof UserApiKeys, boolean>; error?: string | null }
+
+      if (!response.ok || result.error || !result.preference || !result.apiKeyStatus) {
+        setError(result.error || '保存设置失败，请稍后重试。')
+        return
+      }
+
+      setApiKeyStatus(result.apiKeyStatus)
+      setApiKeyDrafts(emptyApiKeys)
+      setSavedState({
+        preference: normalizePreference(result.preference),
+        otherDomainEnabled,
+        otherDomain: trimmedOtherDomain,
+      })
+      setSaved(true)
+    } catch {
+      setError('保存设置失败，请稍后重试。')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function toggleDomain(value: string) {
@@ -107,125 +125,199 @@ export function PreferenceForm({ initialPreference }: PreferenceFormProps) {
     }))
   }
 
+  function updateApiKeyDraft(key: keyof UserApiKeys, value: string) {
+    setSaved(false)
+    setApiKeyDrafts((currentDrafts) => ({ ...currentDrafts, [key]: value }))
+  }
+
   return (
-    <div className="space-y-6">
-      <PreferenceCard title="领域偏好">
-        <CheckboxGroup values={domains} selected={preference.domains} onToggle={toggleDomain} />
-        <OtherInput
-          label="其他"
-          checked={otherDomainEnabled}
-          value={otherDomain}
-          onCheckedChange={(checked) => {
-            setSaved(false)
-            setSavedState((currentState) => ({
-              ...currentState,
-              otherDomainEnabled: checked,
-              preference: checked
-                ? {
-                  ...currentState.preference,
-                  domains: currentState.preference.domains.filter((domain) => domain !== unlimitedDomain),
-                }
-                : currentState.preference,
-            }))
-          }}
-          onValueChange={(value) => {
-            setSaved(false)
-            setSavedState((currentState) => ({
-              ...currentState,
-              otherDomain: value,
-            }))
-          }}
-        />
-      </PreferenceCard>
-
-      <PreferenceCard title="GitHub Token">
-        <Input
-          id="github-token"
-          type="text"
-          value={githubTokenMask}
-          onChange={(event) => {
-            setSaved(false)
-            setGithubToken(event.target.value)
-          }}
-          placeholder="请输入 GitHub Token"
-          autoComplete="off"
-        />
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">保存后会写入浏览器本地存储，采集 GitHub Star 项目时自动使用。</p>
-      </PreferenceCard>
-
-      <PreferenceCard title="候选池倍数">
-        <Select value={String(preference.candidateMultiplier)} onValueChange={(value) => updatePreference({ candidateMultiplier: Number(value) })}>
-          <SelectTrigger className="mt-2 w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[2, 4, 8, 16].map((value) => (
-              <SelectItem key={value} value={String(value)}>{value}×</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">候选池项目数量 = 推荐数量 × 候选池倍数。候选池倍数越大，搜索范围越广，但是消耗 token 越多。</p>
-      </PreferenceCard>
-
-      <PreferenceCard title="并发数设置">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <ConcurrencySelect
-            id="profile-concurrency"
-            label="简介生成并发数"
-            value={preference.profileConcurrency}
-            options={[10, 20, 40, 80, 160, 320]}
-            onChange={(val) => updatePreference({ profileConcurrency: val })}
+    <div className="space-y-8">
+      <SettingsGroup title="API 密钥" description="密钥会保存到数据库，页面只显示是否已设置。">
+        <div className="grid gap-4 lg:grid-row-3">
+          <ApiKeyInput
+            id="github-token"
+            label="GitHub Token"
+            saved={apiKeyStatus.githubToken}
+            value={apiKeyDrafts.githubToken}
+            placeholder={apiKeyStatus.githubToken ? '输入新的 GitHub Token，留空表示不修改' : '请输入 GitHub Token'}
+            onChange={(value) => updateApiKeyDraft('githubToken', value)}
           />
-          <ConcurrencySelect
-            id="analysis-concurrency"
-            label="分析评分并发数"
-            value={preference.analysisConcurrency}
-            options={[2, 4, 8, 16]}
-            onChange={(val) => updatePreference({ analysisConcurrency: val })}
+          <ApiKeyInput
+            id="deepseek-api-key"
+            label="DeepSeek API Key"
+            saved={apiKeyStatus.deepseekApiKey}
+            value={apiKeyDrafts.deepseekApiKey}
+            placeholder={apiKeyStatus.deepseekApiKey ? '输入新的 DeepSeek API Key，留空表示不修改' : '请输入 DeepSeek API Key'}
+            onChange={(value) => updateApiKeyDraft('deepseekApiKey', value)}
           />
-          <ConcurrencySelect
-            id="reason-concurrency"
-            label="推荐理由并发数"
-            value={preference.reasonConcurrency}
-            options={[2, 4, 8, 16]}
-            onChange={(val) => updatePreference({ reasonConcurrency: val })}
+          <ApiKeyInput
+            id="siliconflow-api-key"
+            label="SiliconFlow API Key"
+            saved={apiKeyStatus.siliconFlowApiKey}
+            value={apiKeyDrafts.siliconFlowApiKey}
+            placeholder={apiKeyStatus.siliconFlowApiKey ? '输入新的 SiliconFlow API Key，留空表示不修改' : '请输入 SiliconFlow API Key'}
+            onChange={(value) => updateApiKeyDraft('siliconFlowApiKey', value)}
           />
         </div>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">并发数越大，执行速度越快，消耗 token 越多。</p>
-      </PreferenceCard>
+      </SettingsGroup>
 
-      <PreferenceCard
-        title="项目简介提示词"
-        action={<Button type="button" size="sm" onClick={() => updatePreference({ projectProfileAgentPrompt: getDefaultPreference().projectProfileAgentPrompt })} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">恢复默认</Button>}
-      >
-        <Textarea
-          value={preference.projectProfileAgentPrompt}
-          onChange={(event) => updatePreference({ projectProfileAgentPrompt: event.target.value })}
-          placeholder="请输入项目简介提示词"
-        />
-      </PreferenceCard>
+      <SettingsGroup title="推荐偏好" description="控制推荐结果更偏向哪些技术领域，以及候选项目搜索范围。">
+        <PreferenceCard title="领域偏好">
+          <CheckboxGroup values={domains} selected={preference.domains} onToggle={toggleDomain} />
+          <OtherInput
+            label="其他"
+            checked={otherDomainEnabled}
+            value={otherDomain}
+            onCheckedChange={(checked) => {
+              setSaved(false)
+              setSavedState((currentState) => ({
+                ...currentState,
+                otherDomainEnabled: checked,
+                preference: checked
+                  ? {
+                    ...currentState.preference,
+                    domains: currentState.preference.domains.filter((domain) => domain !== unlimitedDomain),
+                  }
+                  : currentState.preference,
+              }))
+            }}
+            onValueChange={(value) => {
+              setSaved(false)
+              setSavedState((currentState) => ({
+                ...currentState,
+                otherDomain: value,
+              }))
+            }}
+          />
+        </PreferenceCard>
 
-      <PreferenceCard
-        title="项目推荐提示词"
-        action={<Button type="button" size="sm" onClick={() => updatePreference({ recommendationAgentPrompt: getDefaultPreference().recommendationAgentPrompt })} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">恢复默认</Button>}
-      >
-        <Textarea
-          value={preference.recommendationAgentPrompt}
-          onChange={(event) => updatePreference({ recommendationAgentPrompt: event.target.value })}
-          placeholder="请输入项目推荐提示词"
-        />
-      </PreferenceCard>
+        <PreferenceCard title="候选池倍数">
+          <Select value={String(preference.candidateMultiplier)} onValueChange={(value) => updatePreference({ candidateMultiplier: Number(value) })}>
+            <SelectTrigger className="mt-2 w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[2, 4, 8, 16].map((value) => (
+                <SelectItem key={value} value={String(value)}>{value}×</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">候选池项目数量 = 推荐数量 × 候选池倍数。候选池倍数越大，搜索范围越广，但是消耗 token 越多。</p>
+        </PreferenceCard>
+      </SettingsGroup>
+
+      <SettingsGroup title="生成速度" description="控制任务运行速度。并发数越大，运行速度越快，token 消耗越多。">
+        <PreferenceCard title="并发数设置">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <ConcurrencySelect
+              id="profile-concurrency"
+              label="简介生成并发数"
+              value={preference.profileConcurrency}
+              options={[10, 20, 40, 80, 160, 320]}
+              onChange={(val) => updatePreference({ profileConcurrency: val })}
+            />
+            <ConcurrencySelect
+              id="analysis-concurrency"
+              label="分析评分并发数"
+              value={preference.analysisConcurrency}
+              options={[2, 4, 8, 16]}
+              onChange={(val) => updatePreference({ analysisConcurrency: val })}
+            />
+            <ConcurrencySelect
+              id="reason-concurrency"
+              label="推荐理由并发数"
+              value={preference.reasonConcurrency}
+              options={[2, 4, 8, 16]}
+              onChange={(val) => updatePreference({ reasonConcurrency: val })}
+            />
+          </div>
+        </PreferenceCard>
+      </SettingsGroup>
+
+      <SettingsGroup title="提示词模板" description="用于自定义提示词。">
+        <PreferenceCard
+          title="项目简介提示词"
+          action={<Button type="button" size="sm" onClick={() => updatePreference({ projectProfileAgentPrompt: getDefaultPreference().projectProfileAgentPrompt })} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">恢复默认</Button>}
+        >
+          <Textarea
+            value={preference.projectProfileAgentPrompt}
+            onChange={(event) => updatePreference({ projectProfileAgentPrompt: event.target.value })}
+            placeholder="请输入项目简介提示词"
+          />
+        </PreferenceCard>
+
+        <PreferenceCard
+          title="项目推荐提示词"
+          action={<Button type="button" size="sm" onClick={() => updatePreference({ recommendationAgentPrompt: getDefaultPreference().recommendationAgentPrompt })} className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95">恢复默认</Button>}
+        >
+          <Textarea
+            value={preference.recommendationAgentPrompt}
+            onChange={(event) => updatePreference({ recommendationAgentPrompt: event.target.value })}
+            placeholder="请输入项目推荐提示词"
+          />
+        </PreferenceCard>
+      </SettingsGroup>
 
       <div className="min-h-20">
         <Button
           type="button"
-          onClick={saveSettings}
+          onClick={() => void saveSettings()}
+          disabled={saving}
           className="bg-brand-primary hover:bg-brand-primary-hover active:scale-95"
         >
-          保存设置
+          {saving ? '保存中...' : '保存设置'}
         </Button>
-        <p className={`mt-3 text-sm text-brand-text dark:text-emerald-300 ${saved ? 'visible' : 'invisible'}`}>{saved ? '设置已保存到本地。' : '占位'}</p>
+        <p className={`mt-3 text-sm ${error ? 'text-red-500' : 'text-brand-text dark:text-emerald-300'} ${saved || error ? 'visible' : 'invisible'}`}>{error || (saved ? '设置已保存' : '占位')}</p>
       </div>
+    </div>
+  )
+}
+
+interface SettingsGroupProps {
+  title: string
+  description: string
+  children: React.ReactNode
+}
+
+function SettingsGroup({ title, description, children }: SettingsGroupProps) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div>
+        <h2 className="text-xl font-semibold">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p>
+      </div>
+      <div className="mt-5 space-y-5">
+        {children}
+      </div>
+    </section>
+  )
+}
+
+interface ApiKeyInputProps {
+  id: string
+  label: string
+  saved: boolean
+  value: string
+  placeholder: string
+  onChange: (value: string) => void
+}
+
+function ApiKeyInput({ id, label, saved, value, placeholder, onChange }: ApiKeyInputProps) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor={id}>{label}</Label>
+        <span className={`text-xs ${saved ? 'text-brand-text dark:text-emerald-300' : 'text-slate-400 dark:text-slate-500'}`}>{saved ? '已保存' : '未设置'}</span>
+      </div>
+      <Input
+        id={id}
+        type="password"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        autoComplete="off"
+        className="mt-2"
+      />
     </div>
   )
 }
@@ -237,12 +329,12 @@ interface PreferenceCardProps {
 
 function PreferenceCard({ title, children, action }: PreferenceCardProps & { action?: React.ReactNode }) {
   return (
-    <section className="space-y-4">
+    <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{title}</h2>
+        <h3 className="text-lg font-semibold">{title}</h3>
         {action}
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div>
         {children}
       </div>
     </section>

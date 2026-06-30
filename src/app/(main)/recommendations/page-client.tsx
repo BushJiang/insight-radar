@@ -16,6 +16,8 @@ interface RecommendationsPageClientProps {
   initialProjects: GithubProject[]
 }
 
+const logPrefix = '[recommendations-page-client] '
+
 export default function RecommendationsPageClient({ initialProjects }: RecommendationsPageClientProps) {
   const recommendationDraft = readTransientFormState().recommendations
   const [recommendationLimit, setRecommendationLimit] = useState(recommendationDraft.recommendationLimit)
@@ -61,7 +63,7 @@ export default function RecommendationsPageClient({ initialProjects }: Recommend
         }
       } catch (error) {
         // API 失败时保持 loaded=false，卡片显示"加载中..."而非误导的"数据库为空"
-        console.error('[recommendation] 数据库状态查询失败:', error instanceof Error ? error.message : String(error))
+        console.error(`${logPrefix}数据库状态查询失败:`, error instanceof Error ? error.message : String(error))
       }
     }
 

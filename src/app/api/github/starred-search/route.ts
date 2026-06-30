@@ -1,5 +1,6 @@
 // POST /api/github/starred-search — 采集 Star 项目：由 Mastra workflow 编排采集、保存和简介生成阶段
 import { ZodError } from 'zod'
+import { getRuntimeApiKeys, getRuntimePreference } from '@/lib/app-settings-service'
 import { handleZodError } from '@/lib/api-validation'
 import { resolveErrorMessage } from '@/lib/api-response'
 import { createJsonLineSender, jsonLineResponseHeaders, resolveMastraWorkflowProgressStep } from '@/lib/mastra-workflow-stream'
@@ -9,6 +10,10 @@ import { githubStarredSearchSchema } from '@/validations/api-schemas'
 export async function POST(req: Request) {
   try {
     const body = githubStarredSearchSchema.parse(await req.json())
+    const [apiKeys, preference] = await Promise.all([
+      getRuntimeApiKeys(),
+      getRuntimePreference(body.preference),
+    ])
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -20,9 +25,9 @@ export async function POST(req: Request) {
           const workflowStream = run.stream({
             inputData: {
               filters: body.filters,
-              githubToken: body.githubToken,
+              githubToken: apiKeys.githubToken,
               maxProjects: body.maxProjects,
-              preference: body.preference,
+              preference,
             },
           })
           const emittedSteps = new Set<string>()
